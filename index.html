@@ -487,10 +487,26 @@ function draw() {
     });
 
     state.items.forEach(item => {
-        const data = ORE_TYPES[item.id];
-        ctx.fillStyle = data.color;
-        if (item.processed) ctx.fillRect(item.x * gs + gs/2 - 6, item.y * gs + gs/2 - 6, 12, 12);
-        else { ctx.beginPath(); ctx.arc(item.x * gs + gs/2, item.y * gs + gs/2, 6, 0, Math.PI * 2); ctx.fill(); }
+    const data = ORE_TYPES[item.id];
+
+    // 💡 Glow
+    ctx.shadowBlur = 14;
+    ctx.shadowColor = data.color;
+
+    ctx.fillStyle = data.color;
+
+    if (item.processed) {
+        // ⬜ square
+        ctx.fillRect(item.x * gs + gs/2 - 6, item.y * gs + gs/2 - 6, 12, 12);
+    } else {
+        // ⚪ circle
+        ctx.beginPath();
+        ctx.arc(item.x * gs + gs/2, item.y * gs + gs/2, 6, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // reset glow
+    ctx.shadowBlur = 0;
     });
 
     if (state.mode === 'build' && state.selection) {
