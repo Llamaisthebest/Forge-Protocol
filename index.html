@@ -317,8 +317,14 @@ function update(dt) {
         const nextX = Math.round(item.x + (item.dir === 0 ? 1 : item.dir === 2 ? -1 : 0));
         const nextY = Math.round(item.y + (item.dir === 1 ? 1 : item.dir === 3 ? -1 : 0));
 
-        if (item.progress > 0.5 && isSpaceOccupied(nextX, nextY)) {
-            // Wait for space to clear
+        const nextBuilding = getBuildingAt(nextX, nextY);
+
+        if (
+            item.progress > 0.5 &&
+            isSpaceOccupied(nextX, nextY) &&
+            !(nextBuilding && nextBuilding.id === 'seller')
+        ) {
+            // ⛔ wait (unless it's a seller)
         } else {
             item.progress += speed * dt;
             item.x += dx;
@@ -487,26 +493,25 @@ function draw() {
     });
 
     state.items.forEach(item => {
-    const data = ORE_TYPES[item.id];
+        const data = ORE_TYPES[item.id];
 
-    // 💡 Glow
-    ctx.shadowBlur = 14;
-    ctx.shadowColor = data.color;
+        ctx.save();
 
-    ctx.fillStyle = data.color;
+        ctx.glowbalAlpha = 0.9;
+        ctx.shadowBlur = 8;
+        ctx.shadowColor = data.color;
 
-    if (item.processed) {
-        // ⬜ square
-        ctx.fillRect(item.x * gs + gs/2 - 6, item.y * gs + gs/2 - 6, 12, 12);
-    } else {
-        // ⚪ circle
-        ctx.beginPath();
-        ctx.arc(item.x * gs + gs/2, item.y * gs + gs/2, 6, 0, Math.PI * 2);
-        ctx.fill();
-    }
+        ctx.fillStyle = data.color;
 
-    // reset glow
-    ctx.shadowBlur = 0;
+        if (item.processed) {
+            ctx.fillRect(item.x * gs + gs/2 - 6, item.y * gs + gs/2 - 6, 12, 12);
+        } else {
+            ctx.beginPath();
+            ctx.arc(item.x * gs + gs/2, item.y * gs + gs/2, 6, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        ctx.restore();
     });
 
     if (state.mode === 'build' && state.selection) {
