@@ -3,142 +3,190 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Forge Protocol</title>
+    <title>Forge Protocol: Industrial Automation</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Comfortaa:wght@700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;600;800&display=swap');
+
+        :root {
+            --bg-dark: #020617;
+            --panel-bg: rgba(15, 23, 42, 0.85);
+            --accent-sky: #38bdf8;
+            --accent-gold: #fbbf24;
+            --danger: #ef4444;
+            --success: #22c55e;
+        }
+
         body {
             margin: 0;
             overflow: hidden;
-            background-color: #0f172a;
+            background-color: var(--bg-dark);
             color: #f8fafc;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Inter', sans-serif;
             user-select: none;
         }
+
         #game-container {
             display: flex;
             height: 100vh;
             width: 100vw;
         }
+
         #sidebar {
-            width: 300px;
-            background: #1e293b;
-            border-right: 2px solid #334155;
+            width: 320px;
+            background: #0f172a;
+            border-right: 1px solid #1e293b;
             display: flex;
             flex-direction: column;
-            z-index: 10;
+            z-index: 50;
+            box-shadow: 10px 0 30px rgba(0,0,0,0.5);
         }
+
         #canvas-wrapper {
             flex-grow: 1;
             position: relative;
             overflow: hidden;
-            background-color: #0f172a;
         }
+
         canvas {
             display: block;
             cursor: crosshair;
         }
+
+        .custom-scroll::-webkit-scrollbar { width: 4px; }
+        .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+
         .tool-btn {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .tool-btn::after {
+            content: '';
+            position: absolute;
+            bottom: 0; left: 0; width: 0; height: 2px;
+            background: var(--accent-sky);
+            transition: width 0.3s;
+        }
+
+        .tool-btn.active::after { width: 100%; }
+
+        .building-card {
             transition: all 0.2s;
-            border: 2px solid transparent;
+            border: 1px solid #1e293b;
         }
-        .tool-btn.active {
-            border-color: #38bdf8;
-            background-color: #334155;
+
+        .building-card:hover:not(.locked) {
+            border-color: var(--accent-sky);
+            background: #1e293b;
+            transform: translateX(4px);
         }
-        .resource-chip {
-            background: #334155;
-            padding: 8px 12px;
-            border-radius: 8px;
-            font-size: 1rem;
+
+        .building-card.selected {
+            background: #1e293b;
+            border-left: 4px solid var(--accent-sky);
+        }
+
+        #notification-center {
+            position: absolute;
+            top: 20px;
+            right: 20px;
             display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 1000;
+            pointer-events: none;
+        }
+
+        .notif {
+            padding: 12px 20px;
+            border-radius: 8px;
+            background: rgba(15, 23, 42, 0.95);
+            border-left: 4px solid var(--accent-sky);
+            color: white;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+            animation: slideIn 0.3s ease-out forwards;
+            pointer-events: auto;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        #sandbox-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.8);
+            z-index: 2000;
             align-items: center;
             justify-content: center;
-            gap: 8px;
-            border: 1px solid #475569;
-        }
-        .building-card {
-            cursor: pointer;
-            padding: 10px;
-            border-radius: 8px;
-            background: #334155;
-            margin-bottom: 8px;
-            border: 2px solid transparent;
-        }
-        .building-card:hover {
-            background: #475569;
-        }
-        .building-card.selected {
-            border-color: #38bdf8;
-            background: #1e293b;
-        }
-        #tooltip {
-            position: absolute;
-            pointer-events: none;
-            background: rgba(15, 23, 42, 0.95);
-            border: 1px solid #38bdf8;
-            padding: 8px;
-            border-radius: 4px;
-            font-size: 0.8rem;
-            z-index: 100;
-            display: none;
-            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-        }
-        #coords {
-            position: absolute;
-            bottom: 10px;
-            right: 10px;
-            background: rgba(15, 23, 42, 0.7);
-            padding: 4px 10px;
-            border-radius: 4px;
-            font-family: monospace;
-            font-size: 12px;
-            color: #38bdf8;
-            pointer-events: none;
         }
     </style>
 </head>
 <body>
 
 <div id="game-container">
-    <div id="sidebar" class="p-4">
-        <h1 class="text-xl font-bold text-sky-400 mb-4 flex items-center gap-2">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-            FORGE PROTOCOL
-        </h1>
+    <aside id="sidebar" class="p-6">
+        <header class="mb-8">
+            <h1 class="text-2xl font-black tracking-tighter text-sky-400 flex items-center gap-3">
+                <div class="p-2 bg-sky-500/10 rounded-lg">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                </div>
+                FORGE <span class="text-slate-500 font-light">PROTOCOL</span>
+            </h1>
+        </header>
 
-        <div id="resources" class="mb-6">
-            <div class="resource-chip" title="Credits">
-                <span class="text-green-400 font-bold">$</span>
-                <span id="res-money" class="text-lg font-mono tracking-tight">250</span>
+        <section id="stats" class="grid grid-cols-1 gap-3 mb-8">
+            <div class="bg-slate-900/50 p-4 rounded-xl border border-slate-800">
+                <label class="text-[10px] uppercase tracking-widest text-slate-500 font-bold">Available Credits</label>
+                <div class="flex items-center justify-between">
+                    <span class="text-2xl font-mono text-emerald-400" id="res-money">$0</span>
+                </div>
             </div>
+        </section>
+
+        <div class="flex gap-2 mb-6 p-1 bg-slate-900 rounded-lg">
+            <button id="btn-build" class="tool-btn active flex-1 py-2 text-xs font-bold tracking-widest rounded-md transition-colors hover:bg-slate-800">BUILD</button>
+            <button id="btn-sell" class="tool-btn flex-1 py-2 text-xs font-bold tracking-widest text-amber-500 rounded-md transition-colors hover:bg-slate-800">DISMANTLE</button>
         </div>
 
-        <div class="flex gap-2 mb-4">
-            <button id="btn-build" class="tool-btn active flex-1 py-2 bg-slate-700 rounded font-bold">BUILD</button>
-            <button id="btn-sell" class="tool-btn flex-1 py-2 bg-slate-700 rounded font-bold text-yellow-400">SELL</button>
-        </div>
+        <div id="build-menu" class="flex-grow overflow-y-auto custom-scroll space-y-2"></div>
 
-        <div id="build-menu" class="flex-grow overflow-y-auto pr-2"></div>
+        <footer class="mt-6 pt-6 border-t border-slate-800">
+            <div class="flex flex-col gap-2">
+                <button id="btn-home" class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-bold transition-all">CENTER VIEW</button>
+                <div class="text-[10px] text-slate-500 leading-relaxed font-mono">
+                    [R] Rotate | [R-CLICK] Cancel | [CTRL+SHIFT+P] Protocol Keys
+                </div>
+            </div>
+        </footer>
+    </aside>
 
-        <div class="mt-4 p-3 bg-slate-800 rounded text-xs text-slate-400">
-            <button id="btn-home" class="w-full mb-2 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded font-bold transition-colors">CENTER VIEW (0,0)</button>
-            <p>R: Rotate Building</p>
-            <p>Right Click: Move / Deselect</p>
-            <p>Scroll: Zoom</p>
-            <p class="mt-1 text-[10px] opacity-50 italic text-sky-400">World Size 300x300 *non-persistent</p>
-        </div>
-    </div>
-
-    <div id="canvas-wrapper">
+    <main id="canvas-wrapper">
         <canvas id="gameCanvas"></canvas>
-        <div id="tooltip"></div>
-        <div id="coords">X: 0, Y: 0</div>
+        <div id="notification-center"></div>
+        <div id="tooltip" class="fixed pointer-events-none bg-slate-900/95 border border-sky-500/50 p-3 rounded-lg text-xs hidden shadow-2xl z-[100]"></div>
+        <div id="coords" class="absolute bottom-4 right-4 bg-slate-900/80 px-3 py-1 rounded border border-slate-700 font-mono text-[10px] text-sky-400">X:0 Y:0</div>
+    </main>
+</div>
+
+<div id="sandbox-modal">
+    <div class="bg-slate-900 border border-slate-700 p-8 rounded-2xl w-96 shadow-2xl">
+        <h3 class="text-xl font-bold text-sky-400 mb-2">ACCESS OVERRIDE</h3>
+        <p class="text-slate-400 text-xs mb-6">Enter protocol authorization key to unlock terminal.</p>
+        <input type="password" id="sandbox-key" class="w-full bg-slate-950 border border-slate-800 p-3 rounded-lg mb-4 focus:border-sky-500 outline-none font-mono text-sky-400" placeholder="••••••••">
+        <div class="flex gap-2">
+            <button id="sb-cancel" class="flex-1 py-2 bg-slate-800 rounded-lg font-bold text-sm">CANCEL</button>
+            <button id="sb-confirm" class="flex-1 py-2 bg-sky-600 rounded-lg font-bold text-sm">AUTHORIZE</button>
+        </div>
     </div>
 </div>
 
 <script>
-
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const wrapper = document.getElementById('canvas-wrapper');
@@ -146,72 +194,88 @@ const tooltip = document.getElementById('tooltip');
 const coordsDisplay = document.getElementById('coords');
 
 const WORLD_SIZE = 300;
+const GRID_SIZE = 40;
 const OFFSET = WORLD_SIZE / 2;
 
 const state = {
-    camera: { x: 0, y: 0, zoom: 1 },
-    gridSize: 40,
+    camera: { x: 0, y: 0, zoom: 0.8 },
     resources: { money: 250 },
     buildings: [],
     items: [],
     selection: 'belt',
     mode: 'build',
     rotation: 0,
-    lastTick: 0,
-    mouse: { x: 0, y: 0, gridX: 0, gridY: 0, isDown: false, lastX: 0, lastY: 0 },
+    lastTick: performance.now(),
+    mouse: { x: 0, y: 0, gridX: 0, gridY: 0, isDown: false, dragging: false, startX: 0, startY: 0 },
     oreMap: new Map(),
-    floatingTexts: []
+    floatingTexts: [],
+    notifications: [],
+    frame: 0
 };
 
-// Spawnrates increased by 500% (5x density)
 const ORE_TYPES = {
-    'cryston': { color: '#ef4444', label: 'Cryston', weight: 0.4, cluster: 45, count: 12, value: 1, drillSpeed: 1.0 },
-    'bluorite': { color: '#3b82f6', label: 'Bluorite', weight: 0.4, cluster: 45, count: 12, value: 1, drillSpeed: 1.0 },
-    'luxite': { color: '#a855f7', label: 'Luxite', weight: 0.3, cluster: 30, count: 8, value: 3, drillSpeed: 2.5 },
-    'auxirite': { color: '#eab308', label: 'Auxirite', weight: 0.15, cluster: 15, count: 6, value: 5, drillSpeed: 3.5 }
+    'cryston': { color: '#ef4444', label: 'Cryston', value: 2, drillSpeed: 1.0, cluster: 15, weight: 10 },
+    'bluorite': { color: '#3b82f6', label: 'Bluorite', value: 2, drillSpeed: 1.0, cluster: 15, weight: 10 },
+    'luxite': { color: '#a855f7', label: 'Luxite', value: 5, drillSpeed: 2.0, cluster:10, weight: 5 },
+    'auxirite': { color: '#fbbf24', label: 'Auxirite', value: 7, drillSpeed: 3.0, cluster:8, weight: 3 }
 };
 
 const BUILDING_TYPES = {
-    'belt': { name: 'Conveyor Belt', cost: 5, type: 'transport', color: '#475569', desc: 'Moves items forward.' },
-    'drill': { name: 'Drill', cost: 50, type: 'producer', color: '#64748b', desc: 'Speed depends on ore type.' },
-    'smelter': { name: 'Smelter', cost: 75, type: 'processor', color: '#334155', glow: '#f97316', desc: 'Refines ores (+20% value).' },
-    'seller': { name: 'Selling Hub', cost: 100, type: 'consumer', color: '#064e3b', desc: 'Sells items for money.' }
+    'belt': {
+        name: 'Conveyor', cost: 5, type: 'transport', color: '#334155',
+        desc: 'Directs resources toward processors.'
+    },
+    'drill': {
+        name: 'Extraction Drill', cost: 50, type: 'producer', color: '#475569',
+        desc: 'Extracts ores from mineral deposits below.'
+    },
+    'smelter': {
+        name: 'Refinery', cost: 75, type: 'processor', color: '#1e293b',
+        desc: 'Converts raw ore into refined cubes (+50% value).'
+    },
+    'forge': {
+        name: 'Forge', cost: 150, type: 'processor', color: '#2e1065',
+        desc: 'Fuses 2 identical cubes into a hexagon (3x value of 1 cube).'
+    },
+    'seller': {
+        name: 'Trade Hub', cost: 100, type: 'consumer', color: '#064e3b',
+        desc: 'Converts products into operational credits.'
+    }
 };
 
 function init() {
-    generateOres();
+    generateWorld();
     window.addEventListener('resize', resize);
     resize();
     renderBuildMenu();
-    setupEventListeners();
+    setupEvents();
     centerCamera();
-    window.onbeforeunload = () => "Warning! Progress will not be saved!";
+    notify("Protocol Initialized. Ready for operation.", "success");
+
+    // Prevent accidental page refresh/navigation
+    window.addEventListener('beforeunload', (e) => {
+        e.preventDefault();
+        e.returnValue = '';
+    });
+
     requestAnimationFrame(gameLoop);
 }
 
-function generateOres() {
-    state.oreMap.clear();
-    const oreKeys = Object.keys(ORE_TYPES);
-    oreKeys.forEach(typeKey => {
-        const type = ORE_TYPES[typeKey];
-        // Much higher node count for 500% increase
-        const nodesToSpawn = Math.max(type.count, Math.floor(Math.random() * 20 * type.weight * 10));
-        for (let i = 0; i < nodesToSpawn; i++) {
-            let startX = Math.floor(Math.random() * WORLD_SIZE);
-            let startY = Math.floor(Math.random() * WORLD_SIZE);
-            let currX = startX;
-            let currY = startY;
-            const size = type.cluster * (4 + Math.random() * 5);
-            for (let j = 0; j < size; j++) {
-                if (currX >= 0 && currX < WORLD_SIZE && currY >= 0 && currY < WORLD_SIZE) {
-                    state.oreMap.set(`${currX},${currY}`, typeKey);
+function generateWorld() {
+    const keys = Object.keys(ORE_TYPES);
+    keys.forEach(k => {
+        const type = ORE_TYPES[k];
+        const count = Math.floor(10 * type.weight);
+        for(let i = 0; i < count; i++) {
+            let rx = Math.floor(Math.random() * WORLD_SIZE);
+            let ry = Math.floor(Math.random() * WORLD_SIZE);
+            const size = type.cluster + Math.random() * 5;
+            for(let j = 0; j < size; j++) {
+                if(rx >= 0 && rx < WORLD_SIZE && ry >= 0 && ry < WORLD_SIZE) {
+                    state.oreMap.set(`${rx},${ry}`, k);
                 }
-                currX += Math.floor(Math.random() * 3 - 1);
-                currY += Math.floor(Math.random() * 3 - 1);
-                if (Math.random() > 0.8) {
-                    currX = startX + Math.floor(Math.random() * 3 - 1);
-                    currY = startY + Math.floor(Math.random() * 3 - 1);
-                }
+                rx += Math.floor(Math.random() * 3 - 1);
+                ry += Math.floor(Math.random() * 3 - 1);
             }
         }
     });
@@ -222,21 +286,11 @@ function resize() {
     canvas.height = wrapper.clientHeight;
 }
 
-function centerCamera() {
-    const centerX = (WORLD_SIZE * state.gridSize) / 2;
-    const centerY = (WORLD_SIZE * state.gridSize) / 2;
-    state.camera.zoom = 0.8;
-    state.camera.x = canvas.width / 2 - centerX * state.camera.zoom;
-    state.camera.y = canvas.height / 2 - centerY * state.camera.zoom;
-    clampCamera();
-}
-
 function clampCamera() {
-    const gs = state.gridSize * state.camera.zoom;
+    const gs = GRID_SIZE * state.camera.zoom;
     const worldW = WORLD_SIZE * gs;
     const worldH = WORLD_SIZE * gs;
 
-    // Standard clamping logic
     if (worldW > canvas.width) {
         state.camera.x = Math.min(0, Math.max(state.camera.x, canvas.width - worldW));
     } else {
@@ -250,137 +304,303 @@ function clampCamera() {
     }
 }
 
+function centerCamera() {
+    const mid = (WORLD_SIZE * GRID_SIZE) / 2;
+    state.camera.zoom = 0.8;
+    state.camera.x = canvas.width/2 - mid * state.camera.zoom;
+    state.camera.y = canvas.height/2 - mid * state.camera.zoom;
+    clampCamera();
+}
+
+function notify(msg, type = 'info') {
+    const id = Date.now();
+    const container = document.getElementById('notification-center');
+    const el = document.createElement('div');
+    el.className = `notif ${type === 'danger' ? 'border-red-500' : type === 'success' ? 'border-emerald-500' : 'border-sky-500'}`;
+    el.innerHTML = msg;
+    container.appendChild(el);
+    setTimeout(() => {
+        el.style.opacity = '0';
+        el.style.transform = 'translateX(20px)';
+        setTimeout(() => el.remove(), 300);
+    }, 4000);
+}
+
 function renderBuildMenu() {
     const menu = document.getElementById('build-menu');
     menu.innerHTML = '';
     Object.keys(BUILDING_TYPES).forEach(id => {
         const b = BUILDING_TYPES[id];
         const card = document.createElement('div');
-        card.className = `building-card ${state.selection === id ? 'selected' : ''}`;
-        card.innerHTML = `<div class="flex justify-between font-bold text-sm"><span>${b.name}</span><span class="text-yellow-400">$${b.cost}</span></div><p class="text-[10px] text-slate-400 mt-1">${b.desc}</p>`;
-        card.onclick = () => { state.selection = id; state.mode = 'build'; updateUI(); renderBuildMenu(); };
+        card.className = `building-card p-4 rounded-xl cursor-pointer ${state.selection === id ? 'selected' : ''}`;
+        card.innerHTML = `
+            <div class="flex justify-between items-center mb-1">
+                <span class="text-sm font-bold text-slate-100">${b.name}</span>
+                <span class="text-xs font-mono text-emerald-400">$${b.cost}</span>
+            </div>
+            <p class="text-[10px] text-slate-500 leading-tight">${b.desc}</p>
+        `;
+        card.onclick = () => {
+            state.selection = id;
+            state.mode = 'build';
+            updateSidebar();
+            renderBuildMenu();
+        };
         menu.appendChild(card);
     });
 }
 
-function updateUI() {
-    const money = state.resources.money;
-    const displayMoney = money < 100 ? money.toFixed(1) : Math.floor(money).toString();
-    document.getElementById('res-money').innerText = displayMoney;
+function updateSidebar() {
+    document.getElementById('res-money').innerText = `$${Math.floor(state.resources.money)}`;
     document.getElementById('btn-build').classList.toggle('active', state.mode === 'build');
     document.getElementById('btn-sell').classList.toggle('active', state.mode === 'sell');
 }
 
-function gameLoop(time) {
-    const dt = (time - state.lastTick) / 1000;
-    state.lastTick = time;
-    if (dt < 0.1) update(dt);
+function getBuildingAt(x, y) {
+    return state.buildings.find(b => b.x === x && b.y === y);
+}
+
+function isOccupied(x, y) {
+    return state.items.some(it => Math.round(it.x) === x && Math.round(it.y) === y && it.progress < 0.5);
+}
+
+function gameLoop(now) {
+    const dt = (now - state.lastTick) / 1000;
+    state.lastTick = now;
+    state.frame++;
+
+    if (dt < 0.2) update(dt);
     draw();
     requestAnimationFrame(gameLoop);
 }
 
-function isSpaceOccupied(gx, gy) {
-    // Basic check for items currently in the center of a grid tile
-    return state.items.some(item => Math.round(item.x) === gx && Math.round(item.y) === gy && item.progress < 0.4);
-}
-
 function update(dt) {
+    // Building logic
     state.buildings.forEach(b => {
-        if (b.type === 'producer' || b.type === 'processor') {
-            const oreType = state.oreMap.get(`${b.x},${b.y}`);
-            const speed = (b.type === 'producer' && oreType) ? ORE_TYPES[oreType].drillSpeed : 2;
-
-            // Logic: only progress if output space is clear
-            if (!isSpaceOccupied(b.x, b.y)) {
-                b.timer = (b.timer || 0) + dt;
-                if (b.timer >= speed) {
-                    if (b.type === 'producer' && oreType) {
-                        b.timer = 0;
-                        spawnItem(oreType, b.x, b.y, b.rotation);
-                    }
-                    // Smelter processing happens when item enters it (handled in item loop)
+        const def = BUILDING_TYPES[b.id];
+        if (b.id === 'drill') {
+            const ore = state.oreMap.get(`${b.x},${b.y}`);
+            if (ore) {
+                const speed = ORE_TYPES[ore].drillSpeed;
+                b.timer += dt;
+                if (b.timer >= speed && !isOccupied(b.x, b.y)) {
+                    spawnItem(ore, b.x, b.y, b.rotation);
+                    b.timer = 0;
                 }
             }
         }
     });
 
+    // Item movement logic
     for (let i = state.items.length - 1; i >= 0; i--) {
         const item = state.items[i];
-        const speed = 2.0;
+        const moveSpeed = 2.0;
+
         let dx = 0, dy = 0;
-        if (item.dir === 0) dx = speed * dt;
-        else if (item.dir === 1) dy = speed * dt;
-        else if (item.dir === 2) dx = -speed * dt;
-        else if (item.dir === 3) dy = -speed * dt;
+        if (item.dir === 0) dx = 1;
+        else if (item.dir === 1) dy = 1;
+        else if (item.dir === 2) dx = -1;
+        else if (item.dir === 3) dy = -1;
 
-        // Check if next tile is occupied before moving forward past the half-point
-        const nextX = Math.round(item.x + (item.dir === 0 ? 1 : item.dir === 2 ? -1 : 0));
-        const nextY = Math.round(item.y + (item.dir === 1 ? 1 : item.dir === 3 ? -1 : 0));
+        const nextX = Math.round(item.x + dx);
+        const nextY = Math.round(item.y + dy);
 
-        const nextBuilding = getBuildingAt(nextX, nextY);
-
-        if (
-            item.progress > 0.5 &&
-            isSpaceOccupied(nextX, nextY) &&
-            !(nextBuilding && nextBuilding.id === 'seller')
-        ) {
-            // ⛔ wait (unless it's a seller)
+        // Anti-clipping: Don't enter next tile if occupied
+        if (item.progress > 0.5 && isOccupied(nextX, nextY) && !getBuildingAt(nextX, nextY)?.id === 'seller') {
+            // Wait
         } else {
-            item.progress += speed * dt;
-            item.x += dx;
-            item.y += dy;
+            item.progress += moveSpeed * dt;
+            item.x += dx * moveSpeed * dt;
+            item.y += dy * moveSpeed * dt;
         }
 
-        if (item.progress >= 1) {
+        if (item.progress >= 1.0) {
             const curX = Math.round(item.x);
             const curY = Math.round(item.y);
             const b = getBuildingAt(curX, curY);
 
             if (b) {
-                if (b.type === 'transport' || b.type === 'processor') {
-                    item.x = curX; item.y = curY;
-                    item.dir = b.rotation; item.progress = 0;
-                    if (b.type === 'processor' && !item.processed) {
-                        item.processed = true;
-                        item.valueMultiplier = (item.valueMultiplier || 1) + 0.2;
+                if (b.id === 'belt') {
+                    item.x = curX; item.y = curY; item.progress = 0; item.dir = b.rotation;
+                } else if (b.id === 'smelter') {
+                    if (!item.refined && !item.forged) {
+                        // Accept and refine raw ore
+                        item.x = curX; item.y = curY; item.progress = 0; item.dir = b.rotation;
+                        item.refined = true;
+                        item.value *= 1.5;
+                    } else {
+                        // Destroy invalid item
+                        state.items.splice(i, 1);
                     }
-                } else if (b.type === 'consumer') {
-                    const val = (ORE_TYPES[item.id].value * (item.valueMultiplier || 1)).toFixed(1);
-                    state.resources.money += parseFloat(val);
-                    state.floatingTexts.push({ text: `+$${val}`, x: curX, y: curY, timer: 1.5 });
-                    updateUI();
+                } else if (b.id === 'forge') {
+                    if (item.refined && !item.forged) {
+                        // Accept refined cube
+                        item.x = curX; item.y = curY; item.progress = 0; item.dir = b.rotation;
+                        if (!b.buffer) b.buffer = [];
+                        b.buffer.push({ ...item });
+                        state.items.splice(i, 1);
+
+                        let counts = {};
+                        for (let j = 0; j < b.buffer.length; j++) {
+                            let bItem = b.buffer[j];
+                            counts[bItem.id] = (counts[bItem.id] || 0) + 1;
+                            if (counts[bItem.id] >= 2) {
+                                let removed = 0;
+                                let baseVal = 0;
+                                b.buffer = b.buffer.filter(x => {
+                                    if (x.id === bItem.id && removed < 2) {
+                                        removed++;
+                                        baseVal = x.value;
+                                        return false;
+                                    }
+                                    return true;
+                                });
+
+                                state.items.push({
+                                    id: bItem.id, x: curX, y: curY, dir: b.rotation, progress: 0,
+                                    refined: true, forged: true, value: baseVal * 3
+                                });
+                                break;
+                            }
+                        }
+                        continue;
+                    } else {
+                        // Destroy invalid item
+                        state.items.splice(i, 1);
+                    }
+                } else if (b.id === 'seller') {
+                    const gain = item.value;
+                    state.resources.money += gain;
+                    state.floatingTexts.push({ x: curX, y: curY, text: `+$${gain.toFixed(0)}`, life: 1.0 });
                     state.items.splice(i, 1);
-                } else { state.items.splice(i, 1); }
-            } else { state.items.splice(i, 1); }
+                } else {
+                    state.items.splice(i, 1);
+                }
+            } else {
+                state.items.splice(i, 1); // Fell off
+            }
         }
     }
 
-    // Animate floating text
-    for (let i = state.floatingTexts.length - 1; i >= 0; i--) {
-        state.floatingTexts[i].timer -= dt;
-        state.floatingTexts[i].y -= dt * 0.5;
-        if (state.floatingTexts[i].timer <= 0) state.floatingTexts.splice(i, 1);
-    }
+    // Life cycles
+    state.floatingTexts = state.floatingTexts.filter(t => {
+        t.life -= dt;
+        t.y -= dt * 0.5;
+        return t.life > 0;
+    });
+
+    if (state.frame % 30 === 0) updateSidebar();
 }
 
 function spawnItem(id, x, y, dir) {
-    state.items.push({ id, x, y, dir, progress: 0, processed: false, valueMultiplier: 1 });
+    state.items.push({
+        id, x, y, dir, progress: 0, refined: false,
+        value: ORE_TYPES[id].value
+    });
 }
 
-function getBuildingAt(x, y) { return state.buildings.find(b => b.x === x && b.y === y); }
+function draw() {
+    ctx.fillStyle = '#020617';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.save();
+    ctx.translate(state.camera.x, state.camera.y);
+    ctx.scale(state.camera.zoom, state.camera.zoom);
+
+    // Draw Grid
+    const startX = Math.max(0, Math.floor(-state.camera.x / (GRID_SIZE * state.camera.zoom)));
+    const startY = Math.max(0, Math.floor(-state.camera.y / (GRID_SIZE * state.camera.zoom)));
+    const endX = Math.min(WORLD_SIZE, startX + Math.ceil(canvas.width / (GRID_SIZE * state.camera.zoom)) + 1);
+    const endY = Math.min(WORLD_SIZE, startY + Math.ceil(canvas.height / (GRID_SIZE * state.camera.zoom)) + 1);
+
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = startX; x <= endX; x++) {
+        ctx.moveTo(x * GRID_SIZE, startY * GRID_SIZE);
+        ctx.lineTo(x * GRID_SIZE, endY * GRID_SIZE);
+    }
+    for (let y = startY; y <= endY; y++) {
+        ctx.moveTo(startX * GRID_SIZE, y * GRID_SIZE);
+        ctx.lineTo(endX * GRID_SIZE, y * GRID_SIZE);
+    }
+    ctx.stroke();
+
+    // Draw Ores
+    for (let x = startX; x < endX; x++) {
+        for (let y = startY; y < endY; y++) {
+            const ore = state.oreMap.get(`${x},${y}`);
+            if (ore) {
+                ctx.fillStyle = ORE_TYPES[ore].color;
+                ctx.globalAlpha = 0.2;
+                ctx.fillRect(x * GRID_SIZE + 4, y * GRID_SIZE + 4, GRID_SIZE - 8, GRID_SIZE - 8);
+                ctx.globalAlpha = 1.0;
+            }
+        }
+    }
+
+    // Draw Buildings
+    state.buildings.forEach(b => drawBuilding(b));
+
+    // Draw Items
+    state.items.forEach(it => {
+        const color = ORE_TYPES[it.id].color;
+        const cx = (it.x + 0.5) * GRID_SIZE;
+        const cy = (it.y + 0.5) * GRID_SIZE;
+
+        ctx.fillStyle = color;
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = color;
+
+        if (it.forged) {
+            ctx.beginPath();
+            for(let i=0; i<6; i++) {
+                ctx.lineTo(cx + 8*Math.cos(i*Math.PI/3), cy + 8*Math.sin(i*Math.PI/3));
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+        } else if (it.refined) {
+            ctx.fillRect(cx - 6, cy - 6, 12, 12);
+            ctx.strokeStyle = 'white';
+            ctx.strokeRect(cx - 6, cy - 6, 12, 12);
+        } else {
+            ctx.beginPath();
+            ctx.arc(cx, cy, 6, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.shadowBlur = 0;
+    });
+
+    // Draw Floating Text
+    state.floatingTexts.forEach(t => {
+        ctx.fillStyle = `rgba(52, 211, 153, ${t.life})`;
+        ctx.font = 'bold 14px JetBrains Mono';
+        ctx.textAlign = 'center';
+        ctx.fillText(t.text, (t.x + 0.5) * GRID_SIZE, (t.y + 0.2) * GRID_SIZE);
+    });
+
+    // Draw Ghost
+    if (state.mode === 'build' && state.selection) {
+        ctx.globalAlpha = 0.4;
+        drawBuilding({ id: state.selection, x: state.mouse.gridX, y: state.mouse.gridY, rotation: state.rotation, timer: 0 });
+        ctx.globalAlpha = 1.0;
+    }
+
+    ctx.restore();
+}
 
 function drawEdgeArrow(x, y, rotation, color, type = 'out') {
-    const gs = state.gridSize;
+    const gs = GRID_SIZE;
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(rotation);
     ctx.strokeStyle = color;
     ctx.lineWidth = 2;
     ctx.beginPath();
-
-    // Position on the edge
     ctx.translate(gs/2 - gs/8, 0);
-
     if (type === 'out') {
         ctx.moveTo(-gs/8, -gs/8); ctx.lineTo(0, 0); ctx.lineTo(-gs/8, gs/8);
     } else {
@@ -390,183 +610,158 @@ function drawEdgeArrow(x, y, rotation, color, type = 'out') {
     ctx.restore();
 }
 
-function drawBuilding(b, x, y, rotation, opacity = 1) {
-    const gs = state.gridSize;
-    ctx.save();
-    ctx.globalAlpha = opacity;
-    ctx.translate(x + gs/2, y + gs/2);
-
+function drawBuilding(b) {
+    const x = b.x * GRID_SIZE;
+    const y = b.y * GRID_SIZE;
+    const half = GRID_SIZE / 2;
     const def = BUILDING_TYPES[b.id];
 
-    if (b.id === 'seller') {
+    ctx.save();
+    ctx.translate(x + half, y + half);
+
+    if (b.id === 'belt') {
+        ctx.rotate(b.rotation * Math.PI / 2);
         ctx.fillStyle = def.color;
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = '#4ade80';
-
-        ctx.beginPath(); ctx.roundRect(-gs/2 + 4, -gs/2 + 4, gs - 8, gs - 8, 4); ctx.fill();
-
-        ctx.shadowBlur = 0;
-        ctx.fillStyle = '#4ade80';
-        ctx.font = `bold ${gs/2.5}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText('$', 0, 1);
-        // 4 Inward arrows
-        for(let i=0; i<4; i++) drawEdgeArrow(0, 0, i * Math.PI/2, '#4ade80', 'in');
+        ctx.beginPath();
+        ctx.roundRect(-half + 4, -half + 8, GRID_SIZE - 8, GRID_SIZE - 16, 4);
+        ctx.fill();
+        // Animated sliding arrow
+        const offset = ((state.lastTick % 1000) / 1000) * (GRID_SIZE / 2) - GRID_SIZE / 4;
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(offset - 4, -half/4);
+        ctx.lineTo(offset + 4, 0);
+        ctx.lineTo(offset - 4, half/4);
+        ctx.stroke();
     }
     else if (b.id === 'drill') {
         ctx.fillStyle = def.color;
-        ctx.shadowBlur = 12;
-        ctx.shadowColor = '#94a3b8';
-
-        ctx.beginPath(); ctx.roundRect(-gs/2 + 4, -gs/2 + 4, gs - 8, gs - 8, 4); ctx.fill();
-
-        ctx.shadowBlur = 0;
-        // Non-rotating drill bit
+        ctx.beginPath(); ctx.roundRect(-half + 4, -half + 4, GRID_SIZE - 8, GRID_SIZE - 8, 6); ctx.fill();
+        // Drill bit
+        ctx.save();
+        ctx.rotate(state.frame * 0.1);
         ctx.fillStyle = '#94a3b8';
-        ctx.beginPath(); ctx.moveTo(-gs/6, -gs/6); ctx.lineTo(gs/6, -gs/6); ctx.lineTo(0, gs/8); ctx.closePath(); ctx.fill();
-        // Timer with curvy font
-        ctx.fillStyle = 'white';
-        ctx.font = `bold 11px 'Comfortaa', cursive`; ctx.textAlign = 'center';
-        const ore = state.oreMap.get(`${b.x},${b.y}`);
-        const speed = ore ? ORE_TYPES[ore].drillSpeed : 2;
-        const remaining = Math.max(0, speed - (b.timer || 0));
-        ctx.fillText(remaining.toFixed(1) + 's', 0, gs/2 - 6);
-        // Directional arrow on the edge
+        ctx.beginPath();
+        for(let i=0; i<3; i++) {
+            ctx.rotate(Math.PI*2/3);
+            ctx.fillRect(-2, -half + 10, 4, half - 10);
+        }
+        ctx.restore();
+
         drawEdgeArrow(0, 0, b.rotation * Math.PI/2, 'white', 'out');
     }
     else if (b.id === 'smelter') {
         ctx.fillStyle = def.color;
-        ctx.shadowBlur = 10; ctx.shadowColor = def.glow;
-        ctx.beginPath(); ctx.roundRect(-gs/2 + 4, -gs/2 + 4, gs - 8, gs - 8, 4); ctx.fill();
+        ctx.beginPath(); ctx.roundRect(-half + 4, -half + 4, GRID_SIZE - 8, GRID_SIZE - 8, 8); ctx.fill();
+        // Heat glow
+        const glow = Math.sin(state.frame * 0.05) * 10 + 10;
+        ctx.shadowBlur = glow;
+        ctx.shadowColor = '#f97316';
+        ctx.fillStyle = '#f97316';
+        ctx.fillRect(-10, -10, 20, 20);
         ctx.shadowBlur = 0;
-        ctx.strokeStyle = '#f97316'; ctx.lineWidth = 2;
-        ctx.strokeRect(-gs/6, -gs/6, gs/3, gs/3);
-        // Output arrow
+
         drawEdgeArrow(0, 0, b.rotation * Math.PI/2, '#f97316', 'out');
-        // Input arrows (3 sides)
         for(let i=1; i<4; i++) drawEdgeArrow(0, 0, (b.rotation + i) * Math.PI/2, '#f97316', 'in');
     }
-    else {
-        // Belts
-        ctx.rotate(b.rotation * Math.PI/2);
+    else if (b.id === 'forge') {
         ctx.fillStyle = def.color;
-        ctx.shadowBlur = 8;
-        ctx.shadowColor = '#94a3b8';
+        ctx.beginPath(); ctx.roundRect(-half + 4, -half + 4, GRID_SIZE - 8, GRID_SIZE - 8, 8); ctx.fill();
 
-        ctx.beginPath(); ctx.roundRect(-gs/2 + 2, -gs/2 + 6, gs - 4, gs - 12, 4); ctx.fill();
+        const glow = Math.sin(state.frame * 0.05) * 10 + 10;
+        ctx.shadowBlur = glow;
+        ctx.shadowColor = '#c084fc';
+        ctx.fillStyle = '#c084fc';
 
+        ctx.beginPath();
+        for(let i=0; i<6; i++) {
+            ctx.lineTo(8*Math.cos(i*Math.PI/3), 8*Math.sin(i*Math.PI/3));
+        }
+        ctx.closePath();
+        ctx.fill();
         ctx.shadowBlur = 0;
-        ctx.strokeStyle = 'white'; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.moveTo(0, -gs/4); ctx.lineTo(gs/4, 0); ctx.lineTo(0, gs/4); ctx.stroke();
+
+        drawEdgeArrow(0, 0, b.rotation * Math.PI/2, '#c084fc', 'out');
+        for(let i=1; i<4; i++) drawEdgeArrow(0, 0, (b.rotation + i) * Math.PI/2, '#c084fc', 'in');
     }
-    ctx.restore();
-}
-
-function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.save();
-    ctx.translate(state.camera.x, state.camera.y);
-    ctx.scale(state.camera.zoom, state.camera.zoom);
-
-    const gs = state.gridSize;
-    const startX = Math.max(0, Math.floor(-state.camera.x / (gs * state.camera.zoom)));
-    const endX = Math.min(WORLD_SIZE, startX + Math.ceil(canvas.width / (gs * state.camera.zoom)) + 1);
-    const startY = Math.max(0, Math.floor(-state.camera.y / (gs * state.camera.zoom)));
-    const endY = Math.min(WORLD_SIZE, startY + Math.ceil(canvas.height / (gs * state.camera.zoom)) + 1);
-
-    ctx.fillStyle = '#020617';
-    ctx.fillRect(0, 0, WORLD_SIZE * gs, WORLD_SIZE * gs);
-
-    ctx.beginPath(); ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 1/state.camera.zoom;
-    for (let x = startX; x <= endX; x++) { ctx.moveTo(x*gs, startY*gs); ctx.lineTo(x*gs, endY*gs); }
-    for (let y = startY; y <= endY; y++) { ctx.moveTo(startX*gs, y*gs); ctx.lineTo(endX*gs, y*gs); }
-    ctx.stroke();
-
-    for(let x = startX; x < endX; x++) {
-        for(let y = startY; y < endY; y++) {
-            const ore = state.oreMap.get(`${x},${y}`);
-            if (ore) { ctx.fillStyle = ORE_TYPES[ore].color; ctx.globalAlpha = 0.3; ctx.fillRect(x*gs+4, y*gs+4, gs-8, gs-8); ctx.globalAlpha = 1.0; }
-        }
-    }
-
-    state.buildings.forEach(b => {
-        if (b.x >= startX && b.x < endX && b.y >= startY && b.y < endY) drawBuilding(b, b.x * gs, b.y * gs, b.rotation);
-    });
-
-    state.items.forEach(item => {
-        const data = ORE_TYPES[item.id];
-
-        ctx.save();
-
-        ctx.glowbalAlpha = 0.9;
-        ctx.shadowBlur = 8;
-        ctx.shadowColor = data.color;
-
-        ctx.fillStyle = data.color;
-
-        if (item.processed) {
-            ctx.fillRect(item.x * gs + gs/2 - 6, item.y * gs + gs/2 - 6, 12, 12);
-        } else {
-            ctx.beginPath();
-            ctx.arc(item.x * gs + gs/2, item.y * gs + gs/2, 6, 0, Math.PI * 2);
-            ctx.fill();
-        }
-
-        ctx.restore();
-    });
-
-    if (state.mode === 'build' && state.selection) {
-        const gx = state.mouse.gridX;
-        const gy = state.mouse.gridY;
-        if (gx >= 0 && gx < WORLD_SIZE && gy >= 0 && gy < WORLD_SIZE) {
-            drawBuilding({id: state.selection, x: gx, y: gy, rotation: state.rotation, type: BUILDING_TYPES[state.selection].type}, gx * gs, gy * gs, state.rotation, 0.5);
-        }
-    }
-
-    // Render floating texts
-    state.floatingTexts.forEach(ft => {
-        ctx.fillStyle = `rgba(74, 222, 128, ${Math.min(1, ft.timer * 1.5)})`;
-        ctx.font = 'bold 16px monospace';
+    else if (b.id === 'seller') {
+        ctx.fillStyle = def.color;
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = '#4ade80';
+        ctx.beginPath(); ctx.roundRect(-half + 2, -half + 2, GRID_SIZE - 4, GRID_SIZE - 4, 12); ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#4ade80';
+        ctx.font = 'bold 20px Inter';
         ctx.textAlign = 'center';
-        ctx.fillText(ft.text, ft.x * gs + gs/2, ft.y * gs + gs/2 - 10);
-    });
+        ctx.textBaseline = 'middle';
+        ctx.fillText('$', 0, 2);
+
+        for(let i=0; i<4; i++) drawEdgeArrow(0, 0, i * Math.PI/2, '#4ade80', 'in');
+    }
 
     ctx.restore();
 }
 
-function setupEventListeners() {
+function setupEvents() {
     canvas.addEventListener('contextmenu', e => e.preventDefault());
+
     canvas.addEventListener('mousedown', e => {
-        state.mouse.isDown = true; state.mouse.lastX = e.clientX; state.mouse.lastY = e.clientY;
+        state.mouse.isDown = true;
+        state.mouse.startX = e.clientX;
+        state.mouse.startY = e.clientY;
+
         if (e.button === 0) {
-            if (state.mode === 'build' && state.selection) placeBuilding();
-            else if (state.mode === 'sell') sellBuilding();
+            if (state.mode === 'build') placeBuilding();
+            else if (state.mode === 'sell') dismantleBuilding();
         } else if (e.button === 2) {
-            if (state.selection) { state.selection = null; updateUI(); renderBuildMenu(); }
+            state.selection = null;
+            renderBuildMenu();
         }
     });
+
     window.addEventListener('mousemove', e => {
         const rect = canvas.getBoundingClientRect();
-        state.mouse.x = e.clientX - rect.left; state.mouse.y = e.clientY - rect.top;
-        const worldX = (state.mouse.x - state.camera.x) / (state.gridSize * state.camera.zoom);
-        const worldY = (state.mouse.y - state.camera.y) / (state.gridSize * state.camera.zoom);
-        state.mouse.gridX = Math.floor(worldX); state.mouse.gridY = Math.floor(worldY);
-        coordsDisplay.innerText = `X: ${state.mouse.gridX - OFFSET}, Y: ${state.mouse.gridY - OFFSET}`;
+        state.mouse.x = e.clientX - rect.left;
+        state.mouse.y = e.clientY - rect.top;
+
+        state.mouse.pageX = e.clientX;
+        state.mouse.pageY = e.clientY;
+
+        const worldX = (state.mouse.x - state.camera.x) / (GRID_SIZE * state.camera.zoom);
+        const worldY = (state.mouse.y - state.camera.y) / (GRID_SIZE * state.camera.zoom);
+
+        state.mouse.gridX = Math.floor(worldX);
+        state.mouse.gridY = Math.floor(worldY);
+
+        coordsDisplay.innerText = `X:${state.mouse.gridX - OFFSET} Y:${state.mouse.gridY - OFFSET}`;
+
         if (state.mouse.isDown && e.buttons === 2) {
-            state.camera.x += (e.clientX - state.mouse.lastX);
-            state.camera.y += (e.clientY - state.mouse.lastY);
+            state.camera.x += (e.clientX - state.mouse.startX);
+            state.camera.y += (e.clientY - state.mouse.startY);
+            state.mouse.startX = e.clientX;
+            state.mouse.startY = e.clientY;
             clampCamera();
         }
-        state.mouse.lastX = e.clientX; state.mouse.lastY = e.clientY;
         updateTooltip();
     });
-    window.addEventListener('mouseup', () => { state.mouse.isDown = false; });
-    window.addEventListener('keydown', e => { if (e.key.toLowerCase() === 'r') state.rotation = (state.rotation + 1) % 4; });
+
+    window.addEventListener('mouseup', () => state.mouse.isDown = false);
+
+    window.addEventListener('keydown', e => {
+        if (e.key.toLowerCase() === 'r') state.rotation = (state.rotation + 1) % 4;
+
+        // Sandbox keys
+        if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'p') {
+            document.getElementById('sandbox-modal').style.display = 'flex';
+        }
+    });
+
     canvas.addEventListener('wheel', e => {
         e.preventDefault();
         const delta = e.deltaY > 0 ? 0.9 : 1.1;
-        const newZoom = Math.min(Math.max(state.camera.zoom * delta, 0.2), 3);
+        const newZoom = Math.min(Math.max(state.camera.zoom * delta, 0.1), 3);
 
-        // Zoom towards the center of the screen
         const centerX = canvas.width / 2;
         const centerY = canvas.height / 2;
 
@@ -579,41 +774,74 @@ function setupEventListeners() {
 
         clampCamera();
     }, { passive: false });
-    document.getElementById('btn-sell').onclick = () => { state.mode = 'sell'; state.selection = null; updateUI(); renderBuildMenu(); };
-    document.getElementById('btn-build').onclick = () => { state.mode = 'build'; updateUI(); };
+
+    // Buttons
+    document.getElementById('btn-build').onclick = () => state.mode = 'build';
+    document.getElementById('btn-sell').onclick = () => { state.mode = 'sell'; state.selection = null; renderBuildMenu(); };
     document.getElementById('btn-home').onclick = () => centerCamera();
+
+    // Sandbox
+    document.getElementById('sb-cancel').onclick = () => document.getElementById('sandbox-modal').style.display = 'none';
+    document.getElementById('sb-confirm').onclick = () => {
+        const val = document.getElementById('sandbox-key').value;
+        if (val === 'sandbox') {
+            state.resources.money += 1000000;
+            notify("SANDBOX PROTOCOL ENABLED - $1,000,000 ADDED", "success");
+            document.getElementById('sandbox-modal').style.display = 'none';
+        } else {
+            notify("ACCESS DENIED: INVALID KEY", "danger");
+        }
+    };
 }
 
 function placeBuilding() {
-    const gx = state.mouse.gridX; const gy = state.mouse.gridY;
-    if (gx < 0 || gx >= WORLD_SIZE || gy < 0 || gy >= WORLD_SIZE || getBuildingAt(gx, gy)) return;
+    if (!state.selection) return;
+    const gx = state.mouse.gridX;
+    const gy = state.mouse.gridY;
+    if (gx < 0 || gx >= WORLD_SIZE || gy < 0 || gy >= WORLD_SIZE) return;
+    if (getBuildingAt(gx, gy)) return;
+
     const def = BUILDING_TYPES[state.selection];
     if (state.resources.money >= def.cost) {
         state.resources.money -= def.cost;
-        state.buildings.push({ id: state.selection, type: def.type, x: gx, y: gy, rotation: state.rotation, timer: 0 });
-        updateUI();
+        state.buildings.push({
+            id: state.selection,
+            x: gx, y: gy,
+            rotation: state.rotation,
+            timer: 0
+        });
+        updateSidebar();
+    } else {
+        notify("Insufficient Credits", "danger");
     }
 }
 
-function sellBuilding() {
+function dismantleBuilding() {
     const idx = state.buildings.findIndex(b => b.x === state.mouse.gridX && b.y === state.mouse.gridY);
     if (idx !== -1) {
-        state.resources.money += BUILDING_TYPES[state.buildings[idx].id].cost;
+        const b = state.buildings[idx];
+        state.resources.money += BUILDING_TYPES[b.id].cost * 0.8;
         state.buildings.splice(idx, 1);
-        updateUI();
+        updateSidebar();
     }
 }
 
 function updateTooltip() {
     const b = getBuildingAt(state.mouse.gridX, state.mouse.gridY);
     const ore = state.oreMap.get(`${state.mouse.gridX},${state.mouse.gridY}`);
+
     if (b || ore) {
-        tooltip.style.display = 'block'; tooltip.style.left = (state.mouse.x + 20) + 'px'; tooltip.style.top = (state.mouse.y + 20) + 'px';
-        let content = b ? `<strong class="text-sky-300 text-sm">${BUILDING_TYPES[b.id].name}</strong>` : "";
-        if (b && ore) content += "<div class='my-1 border-t border-slate-700'></div>";
-        if (ore) content += `<div class="flex items-center gap-2"><span style="background:${ORE_TYPES[ore].color}" class="w-2 h-2 rounded-full"></span><span class="font-medium text-slate-200">${ORE_TYPES[ore].label} ($${ORE_TYPES[ore].value})</span></div>`;
-        tooltip.innerHTML = content;
-    } else tooltip.style.display = 'none';
+        tooltip.style.display = 'block';
+        tooltip.style.left = (state.mouse.pageX + 15) + 'px';
+        tooltip.style.top = (state.mouse.pageY + 15) + 'px';
+
+        let html = '';
+        if (b) html += `<div class="font-bold text-sky-400 mb-1">${BUILDING_TYPES[b.id].name}</div>`;
+        if (ore) html += `<div class="text-slate-400">Ore: <span class="text-emerald-400">${ORE_TYPES[ore].label} ($${ORE_TYPES[ore].value})</span></div>`;
+        tooltip.innerHTML = html;
+    } else {
+        tooltip.style.display = 'none';
+    }
 }
 
 window.onload = init;
