@@ -145,6 +145,7 @@
                 <label class="text-[10px] uppercase tracking-widest text-slate-500 font-bold">Available Credits</label>
                 <div class="flex items-center justify-between">
                     <span class="text-2xl font-mono text-emerald-400" id="res-money">$0</span>
+                    <button id="btn-test-money" class="bg-emerald-600/80 hover:bg-emerald-500 text-white text-[10px] font-bold px-2 py-1 rounded transition-colors">+10k</button>
                 </div>
             </div>
         </section>
@@ -160,7 +161,7 @@
             <div class="flex flex-col gap-2">
                 <button id="btn-home" class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-bold transition-all">CENTER VIEW</button>
                 <div class="text-[10px] text-slate-500 leading-relaxed font-mono">
-                    [R] Rotate | [R-CLICK] Cancel | [CTRL+SHIFT+P] Protocol Keys
+                    [R] Rotate | [R-CLICK] Cancel | [SHIFT+F+P] Sandbox Protocol
                 </div>
             </div>
         </footer>
@@ -176,7 +177,7 @@
 
 <div id="sandbox-modal">
     <div class="bg-slate-900 border border-slate-700 p-8 rounded-2xl w-96 shadow-2xl">
-        <h3 class="text-xl font-bold text-sky-400 mb-2">ACCESS OVERRIDE</h3>
+        <h3 class="text-xl font-bold text-sky-400 mb-2">SANDBOX PROTOCOL</h3>
         <p class="text-slate-400 text-xs mb-6">Enter protocol authorization key to unlock terminal.</p>
         <input type="password" id="sandbox-key" class="w-full bg-slate-950 border border-slate-800 p-3 rounded-lg mb-4 focus:border-sky-500 outline-none font-mono text-sky-400" placeholder="••••••••">
         <div class="flex gap-2">
@@ -210,7 +211,8 @@ const state = {
     oreMap: new Map(),
     floatingTexts: [],
     notifications: [],
-    frame: 0
+    frame: 0,
+    sandboxEnabled: false
 };
 
 const ORE_TYPES = {
@@ -222,23 +224,23 @@ const ORE_TYPES = {
 
 const BUILDING_TYPES = {
     'belt': {
-        name: 'Conveyor', cost: 5, type: 'transport', color: '#334155',
-        desc: 'Directs resources toward processors.'
+        name: 'Conveyor Belts', cost: 5, type: 'transport', color: '#334155',
+        desc: 'Directs resources toward factories.'
     },
     'drill': {
         name: 'Extraction Drill', cost: 50, type: 'producer', color: '#475569',
         desc: 'Extracts ores from mineral deposits below.'
     },
-    'smelter': {
-        name: 'Refinery', cost: 75, type: 'processor', color: '#1e293b',
+    'refinery': {
+        name: 'Ore Refinery', cost: 75, type: 'processor', color: '#1e293b',
         desc: 'Converts raw ore into refined cubes (+50% value).'
     },
     'forge': {
-        name: 'Forge', cost: 150, type: 'processor', color: '#2e1065',
-        desc: 'Fuses 2 identical cubes into a hexagon (3x value of 1 cube).'
+        name: 'Refined Forge', cost: 150, type: 'processor', w: 2, h: 2, color: '#2e1065',
+        desc: 'Fuses 2 identical cubes into a hexagon (3x value).'
     },
-    'seller': {
-        name: 'Trade Hub', cost: 100, type: 'consumer', color: '#064e3b',
+    'hub': {
+        name: 'Trading Hub', cost: 100, type: 'consumer', color: '#064e3b',
         desc: 'Converts products into operational credits.'
     }
 };
@@ -252,7 +254,6 @@ function init() {
     centerCamera();
     notify("Protocol Initialized. Ready for operation.", "success");
 
-    // Prevent accidental page refresh/navigation
     window.addEventListener('beforeunload', (e) => {
         e.preventDefault();
         e.returnValue = '';
@@ -313,7 +314,6 @@ function centerCamera() {
 }
 
 function notify(msg, type = 'info') {
-    const id = Date.now();
     const container = document.getElementById('notification-center');
     const el = document.createElement('div');
     el.className = `notif ${type === 'danger' ? 'border-red-500' : type === 'success' ? 'border-emerald-500' : 'border-sky-500'}`;
@@ -357,11 +357,28 @@ function updateSidebar() {
 }
 
 function getBuildingAt(x, y) {
-    return state.buildings.find(b => b.x === x && b.y === y);
+    return state.buildings.find(b => {
+        const w = BUILDING_TYPES[b.id].w || 1;
+        const h = BUILDING_TYPES[b.id].h || 1;
+        return x >= b.x && x < b.x + w && y >= b.y && y < b.y + h;
+    });
 }
 
-function isOccupied(x, y) {
-    return state.items.some(it => Math.round(it.x) === x && Math.round(it.y) === y && it.progress < 0.5);
+function isOccupied(x, y, excludeItem = null) {
+    return state.items.some(it => {
+        if (it === excludeItem) return false;
+
+        let dx = 0, dy = 0;
+        if (it.dir === 0) dx = 1;
+        else if (it.dir === 1) dy = 1;
+        else if (it.dir === 2) dx = -1;
+        else if (it.dir === 3) dy = -1;
+
+        if (it.gridX === x && it.gridY === y && it.progress <= 0.5) return true;
+        if (it.gridX + dx === x && it.gridY + dy === y && it.progress > 0.5) return true;
+
+        return false;
+    });
 }
 
 function gameLoop(now) {
@@ -375,100 +392,149 @@ function gameLoop(now) {
 }
 
 function update(dt) {
-    // Building logic
+    // Building Logic
     state.buildings.forEach(b => {
-        const def = BUILDING_TYPES[b.id];
         if (b.id === 'drill') {
             const ore = state.oreMap.get(`${b.x},${b.y}`);
             if (ore) {
                 const speed = ORE_TYPES[ore].drillSpeed;
                 b.timer += dt;
-                if (b.timer >= speed && !isOccupied(b.x, b.y)) {
-                    spawnItem(ore, b.x, b.y, b.rotation);
-                    b.timer = 0;
+                if (b.timer >= speed) {
+                    if (!isOccupied(b.x, b.y)) {
+                        spawnItem(ore, b.x, b.y, b.rotation);
+                        b.timer = 0;
+                        b.blocked = false;
+                    } else {
+                        b.blocked = true;
+                        b.timer = speed; // Cap timer
+                    }
+                } else {
+                    b.blocked = false;
+                }
+            }
+        } else if (b.id === 'forge') {
+            // Continuously check if Forge is ready to output
+            if (b.buffer) {
+                let port0Item = b.buffer.find(x => x.port === 0);
+                let port1Item = b.buffer.find(x => x.port === 1);
+
+                if (port0Item && port1Item) {
+                    // Output on the right side of the factory
+                    const outX = b.x + (b.rotation === 0 || b.rotation === 3 ? 1 : 0);
+                    const outY = b.y + (b.rotation === 0 || b.rotation === 1 ? 1 : 0);
+
+                    // Only produce and clear buffer if the exit tile is clear
+                    if (!isOccupied(outX, outY)) {
+                        let baseVal = port0Item.value;
+                        b.buffer = []; // Clear buffer
+
+                        state.items.push({
+                            id: port0Item.id, gridX: outX, gridY: outY, dir: b.rotation, progress: 0,
+                            refined: true, forged: true, value: baseVal * 3
+                        });
+                    }
                 }
             }
         }
     });
 
-    // Item movement logic
+    // Item Movement Logic
     for (let i = state.items.length - 1; i >= 0; i--) {
         const item = state.items[i];
-        const moveSpeed = 2.0;
 
+        // Anti-Ghosting: If building gets dismantled, destroy the item immediately
+        if (!getBuildingAt(item.gridX, item.gridY)) {
+            state.items.splice(i, 1);
+            continue;
+        }
+
+        const moveSpeed = 2.0;
         let dx = 0, dy = 0;
         if (item.dir === 0) dx = 1;
         else if (item.dir === 1) dy = 1;
         else if (item.dir === 2) dx = -1;
         else if (item.dir === 3) dy = -1;
 
-        const nextX = Math.round(item.x + dx);
-        const nextY = Math.round(item.y + dy);
+        const nextX = item.gridX + dx;
+        const nextY = item.gridY + dy;
 
-        // Anti-clipping: Don't enter next tile if occupied
-        if (item.progress > 0.5 && isOccupied(nextX, nextY) && !getBuildingAt(nextX, nextY)?.id === 'seller') {
-            // Wait
+        let requestedProgress = item.progress + moveSpeed * dt;
+        let blocked = false;
+
+        // Anti-clipping & Strict Rejection Logic
+        if (requestedProgress > 0.5) {
+            const bCurrent = getBuildingAt(item.gridX, item.gridY);
+            const bNext = getBuildingAt(nextX, nextY);
+
+            let opposes = false;
+            if (bNext && bNext !== bCurrent) {
+                if (bNext.type === 'producer') {
+                    opposes = true; // Drills act as absolute solid walls
+                } else if (bNext.id === 'forge') {
+                    if (item.dir !== bNext.rotation) opposes = true; // Must enter Forge from back
+                    if (!item.refined || item.forged) opposes = true; // Forge ONLY accepts refined cubes
+                    if (bNext.buffer && bNext.buffer.length > 0 && bNext.buffer[0].id !== item.id) opposes = true; // Match type
+
+                    const port = (bNext.rotation % 2 === 0) ? (nextY - bNext.y) : (nextX - bNext.x);
+                    if (bNext.buffer && bNext.buffer.some(x => x.port === port)) opposes = true; // Block if this port already has an item
+                } else if (bNext.id === 'refinery') {
+                    if (item.dir !== bNext.rotation) opposes = true; // Must enter Refinery from back
+                    if (item.refined || item.forged) opposes = true; // Refinery ONLY accepts raw circles
+                } else if (bNext.type !== 'consumer' && Math.abs(item.dir - bNext.rotation) === 2) {
+                    opposes = true; // Prevents entering the output side of a belt
+                }
+            }
+
+            if (bNext?.id === 'hub') {
+                blocked = false; // Trading Hub strictly accepts from all directions infinitely
+            } else if (opposes || isOccupied(nextX, nextY, item)) {
+                blocked = true;
+            }
+        }
+
+        if (blocked) {
+            item.progress = Math.min(requestedProgress, 0.5); // Halt exactly at the boundary edge (snaps back if slipping past)
         } else {
-            item.progress += moveSpeed * dt;
-            item.x += dx * moveSpeed * dt;
-            item.y += dy * moveSpeed * dt;
+            item.progress = requestedProgress;
         }
 
         if (item.progress >= 1.0) {
-            const curX = Math.round(item.x);
-            const curY = Math.round(item.y);
+            item.gridX = nextX;
+            item.gridY = nextY;
+            item.progress -= 1.0;
+
+            const curX = item.gridX;
+            const curY = item.gridY;
             const b = getBuildingAt(curX, curY);
 
             if (b) {
                 if (b.id === 'belt') {
-                    item.x = curX; item.y = curY; item.progress = 0; item.dir = b.rotation;
-                } else if (b.id === 'smelter') {
+                    item.dir = b.rotation;
+                } else if (b.id === 'refinery') {
                     if (!item.refined && !item.forged) {
-                        // Accept and refine raw ore
-                        item.x = curX; item.y = curY; item.progress = 0; item.dir = b.rotation;
+                        item.dir = b.rotation;
                         item.refined = true;
                         item.value *= 1.5;
                     } else {
-                        // Destroy invalid item
                         state.items.splice(i, 1);
                     }
                 } else if (b.id === 'forge') {
                     if (item.refined && !item.forged) {
-                        // Accept refined cube
-                        item.x = curX; item.y = curY; item.progress = 0; item.dir = b.rotation;
+                        item.dir = b.rotation;
                         if (!b.buffer) b.buffer = [];
-                        b.buffer.push({ ...item });
+
+                        const port = (b.rotation % 2 === 0) ? (curY - b.y) : (curX - b.x);
+                        b.buffer.push({ ...item, progress: 0, port: port });
                         state.items.splice(i, 1);
 
-                        let counts = {};
-                        for (let j = 0; j < b.buffer.length; j++) {
-                            let bItem = b.buffer[j];
-                            counts[bItem.id] = (counts[bItem.id] || 0) + 1;
-                            if (counts[bItem.id] >= 2) {
-                                let removed = 0;
-                                let baseVal = 0;
-                                b.buffer = b.buffer.filter(x => {
-                                    if (x.id === bItem.id && removed < 2) {
-                                        removed++;
-                                        baseVal = x.value;
-                                        return false;
-                                    }
-                                    return true;
-                                });
-
-                                state.items.push({
-                                    id: bItem.id, x: curX, y: curY, dir: b.rotation, progress: 0,
-                                    refined: true, forged: true, value: baseVal * 3
-                                });
-                                break;
-                            }
-                        }
+                        // Production logic moved to Building Logic loop above
                         continue;
+                    } else if (item.forged) {
+                        item.dir = b.rotation; // Allow Hexagon to safely travel across the second tile of the Forge
                     } else {
-                        // Destroy invalid item
                         state.items.splice(i, 1);
                     }
-                } else if (b.id === 'seller') {
+                } else if (b.id === 'hub') {
                     const gain = item.value;
                     state.resources.money += gain;
                     state.floatingTexts.push({ x: curX, y: curY, text: `+$${gain.toFixed(0)}`, life: 1.0 });
@@ -477,12 +543,11 @@ function update(dt) {
                     state.items.splice(i, 1);
                 }
             } else {
-                state.items.splice(i, 1); // Fell off
+                state.items.splice(i, 1); // Delete if falls off into the void
             }
         }
     }
 
-    // Life cycles
     state.floatingTexts = state.floatingTexts.filter(t => {
         t.life -= dt;
         t.y -= dt * 0.5;
@@ -494,7 +559,7 @@ function update(dt) {
 
 function spawnItem(id, x, y, dir) {
     state.items.push({
-        id, x, y, dir, progress: 0, refined: false,
+        id, gridX: x, gridY: y, dir, progress: 0, refined: false, forged: false,
         value: ORE_TYPES[id].value
     });
 }
@@ -507,7 +572,7 @@ function draw() {
     ctx.translate(state.camera.x, state.camera.y);
     ctx.scale(state.camera.zoom, state.camera.zoom);
 
-    // Draw Grid
+    // Grid
     const startX = Math.max(0, Math.floor(-state.camera.x / (GRID_SIZE * state.camera.zoom)));
     const startY = Math.max(0, Math.floor(-state.camera.y / (GRID_SIZE * state.camera.zoom)));
     const endX = Math.min(WORLD_SIZE, startX + Math.ceil(canvas.width / (GRID_SIZE * state.camera.zoom)) + 1);
@@ -526,7 +591,7 @@ function draw() {
     }
     ctx.stroke();
 
-    // Draw Ores
+    // Ores
     for (let x = startX; x < endX; x++) {
         for (let y = startY; y < endY; y++) {
             const ore = state.oreMap.get(`${x},${y}`);
@@ -539,29 +604,50 @@ function draw() {
         }
     }
 
-    // Draw Buildings
     state.buildings.forEach(b => drawBuilding(b));
 
-    // Draw Items
+    // Items
     state.items.forEach(it => {
         const color = ORE_TYPES[it.id].color;
-        const cx = (it.x + 0.5) * GRID_SIZE;
-        const cy = (it.y + 0.5) * GRID_SIZE;
+
+        let dx = 0, dy = 0;
+        if (it.dir === 0) dx = 1;
+        else if (it.dir === 1) dy = 1;
+        else if (it.dir === 2) dx = -1;
+        else if (it.dir === 3) dy = -1;
+
+        const cx = (it.gridX + dx * it.progress + 0.5) * GRID_SIZE;
+        const cy = (it.gridY + dy * it.progress + 0.5) * GRID_SIZE;
 
         ctx.fillStyle = color;
         ctx.shadowBlur = 10;
         ctx.shadowColor = color;
 
         if (it.forged) {
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.rotate(state.frame * 0.02); // Continuous spinning animation
+
+            // Outer hexagon
             ctx.beginPath();
             for(let i=0; i<6; i++) {
-                ctx.lineTo(cx + 8*Math.cos(i*Math.PI/3), cy + 8*Math.sin(i*Math.PI/3));
+                ctx.lineTo(11 * Math.cos(i*Math.PI/3), 11 * Math.sin(i*Math.PI/3)); // Increased size
             }
             ctx.closePath();
             ctx.fill();
             ctx.strokeStyle = 'white';
             ctx.lineWidth = 1.5;
             ctx.stroke();
+
+            // Inner geometric detail
+            ctx.beginPath();
+            for(let i=0; i<6; i++) {
+                ctx.lineTo(5 * Math.cos(i*Math.PI/3), 5 * Math.sin(i*Math.PI/3));
+            }
+            ctx.closePath();
+            ctx.stroke();
+
+            ctx.restore();
         } else if (it.refined) {
             ctx.fillRect(cx - 6, cy - 6, 12, 12);
             ctx.strokeStyle = 'white';
@@ -574,7 +660,6 @@ function draw() {
         ctx.shadowBlur = 0;
     });
 
-    // Draw Floating Text
     state.floatingTexts.forEach(t => {
         ctx.fillStyle = `rgba(52, 211, 153, ${t.life})`;
         ctx.font = 'bold 14px JetBrains Mono';
@@ -582,7 +667,6 @@ function draw() {
         ctx.fillText(t.text, (t.x + 0.5) * GRID_SIZE, (t.y + 0.2) * GRID_SIZE);
     });
 
-    // Draw Ghost
     if (state.mode === 'build' && state.selection) {
         ctx.globalAlpha = 0.4;
         drawBuilding({ id: state.selection, x: state.mouse.gridX, y: state.mouse.gridY, rotation: state.rotation, timer: 0 });
@@ -611,22 +695,24 @@ function drawEdgeArrow(x, y, rotation, color, type = 'out') {
 }
 
 function drawBuilding(b) {
+    const def = BUILDING_TYPES[b.id];
+    const w = def.w || 1;
+    const h = def.h || 1;
     const x = b.x * GRID_SIZE;
     const y = b.y * GRID_SIZE;
-    const half = GRID_SIZE / 2;
-    const def = BUILDING_TYPES[b.id];
+    const gs = GRID_SIZE;
+    const half = gs / 2;
 
     ctx.save();
-    ctx.translate(x + half, y + half);
+    ctx.translate(x + w * half, y + h * half);
 
     if (b.id === 'belt') {
         ctx.rotate(b.rotation * Math.PI / 2);
         ctx.fillStyle = def.color;
         ctx.beginPath();
-        ctx.roundRect(-half + 4, -half + 8, GRID_SIZE - 8, GRID_SIZE - 16, 4);
+        ctx.roundRect(-half + 4, -half + 8, gs - 8, gs - 16, 4);
         ctx.fill();
-        // Animated sliding arrow
-        const offset = ((state.lastTick % 1000) / 1000) * (GRID_SIZE / 2) - GRID_SIZE / 4;
+        const offset = ((state.lastTick % 1000) / 1000) * (gs / 2) - gs / 4;
         ctx.strokeStyle = 'white';
         ctx.lineWidth = 2;
         ctx.beginPath();
@@ -637,10 +723,12 @@ function drawBuilding(b) {
     }
     else if (b.id === 'drill') {
         ctx.fillStyle = def.color;
-        ctx.beginPath(); ctx.roundRect(-half + 4, -half + 4, GRID_SIZE - 8, GRID_SIZE - 8, 6); ctx.fill();
-        // Drill bit
+        ctx.beginPath(); ctx.roundRect(-half + 4, -half + 4, gs - 8, gs - 8, 6); ctx.fill();
+
         ctx.save();
-        ctx.rotate(state.frame * 0.1);
+        if (!b.blocked) {
+            ctx.rotate(state.frame * 0.1);
+        }
         ctx.fillStyle = '#94a3b8';
         ctx.beginPath();
         for(let i=0; i<3; i++) {
@@ -650,52 +738,98 @@ function drawBuilding(b) {
         ctx.restore();
 
         drawEdgeArrow(0, 0, b.rotation * Math.PI/2, 'white', 'out');
+
+        if (b.blocked) {
+            ctx.fillStyle = '#ef4444';
+            ctx.font = 'bold 24px JetBrains Mono';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            const pulse = Math.abs(Math.sin(state.frame * 0.08)) * 8 + 2;
+            ctx.shadowBlur = pulse;
+            ctx.shadowColor = '#ef4444';
+            ctx.fillText('!', 0, 2);
+            ctx.shadowBlur = 0;
+        }
     }
-    else if (b.id === 'smelter') {
+    else if (b.id === 'refinery') {
         ctx.fillStyle = def.color;
-        ctx.beginPath(); ctx.roundRect(-half + 4, -half + 4, GRID_SIZE - 8, GRID_SIZE - 8, 8); ctx.fill();
-        // Heat glow
-        const glow = Math.sin(state.frame * 0.05) * 10 + 10;
+        ctx.beginPath(); ctx.roundRect(-half + 4, -half + 4, gs - 8, gs - 8, 8); ctx.fill();
+
+        const glow = Math.sin(state.frame * 0.03) * 3 + 5;
         ctx.shadowBlur = glow;
         ctx.shadowColor = '#f97316';
         ctx.fillStyle = '#f97316';
-        ctx.fillRect(-10, -10, 20, 20);
+        ctx.fillRect(-7, -7, 14, 14);
         ctx.shadowBlur = 0;
 
         drawEdgeArrow(0, 0, b.rotation * Math.PI/2, '#f97316', 'out');
-        for(let i=1; i<4; i++) drawEdgeArrow(0, 0, (b.rotation + i) * Math.PI/2, '#f97316', 'in');
+        drawEdgeArrow(0, 0, (b.rotation + 2) * Math.PI/2, '#f97316', 'in');
     }
     else if (b.id === 'forge') {
+        ctx.rotate(b.rotation * Math.PI / 2); // Rotate context so arrows draw properly on local edges
         ctx.fillStyle = def.color;
-        ctx.beginPath(); ctx.roundRect(-half + 4, -half + 4, GRID_SIZE - 8, GRID_SIZE - 8, 8); ctx.fill();
+        const bw = w * gs - 8;
+        const bh = h * gs - 8;
+        ctx.beginPath(); ctx.roundRect(-w*half + 4, -h*half + 4, bw, bh, 8); ctx.fill();
 
-        const glow = Math.sin(state.frame * 0.05) * 10 + 10;
+        const glow = Math.sin(state.frame * 0.05) * 6 + 8;
         ctx.shadowBlur = glow;
-        ctx.shadowColor = '#c084fc';
+        ctx.shadowColor = '#d8b4fe'; // Lighter, brighter purple glow
         ctx.fillStyle = '#c084fc';
+        ctx.strokeStyle = '#c084fc';
 
+        // Outer counter-rotating containment ring
+        ctx.save();
+        ctx.rotate(state.frame * -0.005);
+        ctx.lineWidth = 2;
         ctx.beginPath();
         for(let i=0; i<6; i++) {
-            ctx.lineTo(8*Math.cos(i*Math.PI/3), 8*Math.sin(i*Math.PI/3));
+            ctx.lineTo(20 * Math.cos(i*Math.PI/3), 20 * Math.sin(i*Math.PI/3));
+        }
+        ctx.closePath();
+        ctx.stroke();
+        ctx.restore();
+
+        // Inner pulsing & spinning active core
+        ctx.save();
+        ctx.rotate(state.frame * 0.02);
+        const coreSize = 10 + Math.sin(state.frame * 0.05) * 2; // Rapid pulsing size
+        ctx.beginPath();
+        for(let i=0; i<6; i++) {
+            ctx.lineTo(coreSize * Math.cos(i*Math.PI/3), coreSize * Math.sin(i*Math.PI/3));
         }
         ctx.closePath();
         ctx.fill();
+
+        // White-hot plasma center
+        ctx.fillStyle = '#ffffff';
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(0, 0, 4, 0, Math.PI*2);
+        ctx.fill();
+        ctx.restore();
+
         ctx.shadowBlur = 0;
 
-        drawEdgeArrow(0, 0, b.rotation * Math.PI/2, '#c084fc', 'out');
-        for(let i=1; i<4; i++) drawEdgeArrow(0, 0, (b.rotation + i) * Math.PI/2, '#c084fc', 'in');
+        // Draw edge arrows dynamically for the 2x2 footprint based on local center
+        // Only drawing the Right output port
+        drawEdgeArrow(gs/2, gs/2, 0, '#c084fc', 'out');
+        // Left and Right input ports
+        drawEdgeArrow(-gs/2, -gs/2, Math.PI, '#c084fc', 'in');
+        drawEdgeArrow(-gs/2, gs/2, Math.PI, '#c084fc', 'in');
     }
-    else if (b.id === 'seller') {
+    else if (b.id === 'hub') {
         ctx.fillStyle = def.color;
-        ctx.shadowBlur = 10;
+        ctx.shadowBlur = 6;
         ctx.shadowColor = '#4ade80';
-        ctx.beginPath(); ctx.roundRect(-half + 2, -half + 2, GRID_SIZE - 4, GRID_SIZE - 4, 12); ctx.fill();
+        ctx.beginPath(); ctx.roundRect(-half + 4, -half + 4, gs - 8, gs - 8, 8); ctx.fill();
         ctx.shadowBlur = 0;
         ctx.fillStyle = '#4ade80';
         ctx.font = 'bold 20px Inter';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('$', 0, 2);
+        ctx.fillText('$', 0, 1);
 
         for(let i=0; i<4; i++) drawEdgeArrow(0, 0, i * Math.PI/2, '#4ade80', 'in');
     }
@@ -748,12 +882,25 @@ function setupEvents() {
 
     window.addEventListener('mouseup', () => state.mouse.isDown = false);
 
+    const activeKeys = {};
+
+    window.addEventListener('keyup', e => {
+        activeKeys[e.key.toLowerCase()] = false;
+    });
+
     window.addEventListener('keydown', e => {
+        activeKeys[e.key.toLowerCase()] = true;
+
         if (e.key.toLowerCase() === 'r') state.rotation = (state.rotation + 1) % 4;
 
-        // Sandbox keys
-        if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'p') {
-            document.getElementById('sandbox-modal').style.display = 'flex';
+        if (e.shiftKey && activeKeys['f'] && activeKeys['p']) {
+            if (state.sandboxEnabled) {
+                notify("SANDBOX PROTOCOL IS ALREADY ENABLED", "sky");
+            } else {
+                document.getElementById('sandbox-modal').style.display = 'flex';
+            }
+            activeKeys['f'] = false;
+            activeKeys['p'] = false;
         }
     });
 
@@ -775,22 +922,31 @@ function setupEvents() {
         clampCamera();
     }, { passive: false });
 
-    // Buttons
     document.getElementById('btn-build').onclick = () => state.mode = 'build';
     document.getElementById('btn-sell').onclick = () => { state.mode = 'sell'; state.selection = null; renderBuildMenu(); };
     document.getElementById('btn-home').onclick = () => centerCamera();
 
-    // Sandbox
-    document.getElementById('sb-cancel').onclick = () => document.getElementById('sandbox-modal').style.display = 'none';
+    document.getElementById('btn-test-money').onclick = () => {
+        state.resources.money += 10000;
+        updateSidebar();
+    };
+
+    document.getElementById('sb-cancel').onclick = () => {
+        document.getElementById('sandbox-modal').style.display = 'none';
+        document.getElementById('sandbox-key').value = '';
+    };
     document.getElementById('sb-confirm').onclick = () => {
         const val = document.getElementById('sandbox-key').value;
         if (val === 'sandbox') {
-            state.resources.money += 1000000;
-            notify("SANDBOX PROTOCOL ENABLED - $1,000,000 ADDED", "success");
-            document.getElementById('sandbox-modal').style.display = 'none';
+            state.resources.money += 10000000;
+            state.sandboxEnabled = true;
+            notify("SANDBOX PROTOCOL ENABLED - $10,000,000 ADDED", "success");
+            updateSidebar();
         } else {
             notify("ACCESS DENIED: INVALID KEY", "danger");
         }
+        document.getElementById('sandbox-modal').style.display = 'none';
+        document.getElementById('sandbox-key').value = '';
     };
 }
 
@@ -798,10 +954,18 @@ function placeBuilding() {
     if (!state.selection) return;
     const gx = state.mouse.gridX;
     const gy = state.mouse.gridY;
-    if (gx < 0 || gx >= WORLD_SIZE || gy < 0 || gy >= WORLD_SIZE) return;
-    if (getBuildingAt(gx, gy)) return;
-
     const def = BUILDING_TYPES[state.selection];
+    const w = def.w || 1;
+    const h = def.h || 1;
+
+    if (gx < 0 || gx + w > WORLD_SIZE || gy < 0 || gy + h > WORLD_SIZE) return;
+
+    for(let dx=0; dx<w; dx++) {
+        for(let dy=0; dy<h; dy++) {
+            if (getBuildingAt(gx + dx, gy + dy)) return;
+        }
+    }
+
     if (state.resources.money >= def.cost) {
         state.resources.money -= def.cost;
         state.buildings.push({
@@ -817,7 +981,15 @@ function placeBuilding() {
 }
 
 function dismantleBuilding() {
-    const idx = state.buildings.findIndex(b => b.x === state.mouse.gridX && b.y === state.mouse.gridY);
+    const gx = state.mouse.gridX;
+    const gy = state.mouse.gridY;
+
+    const idx = state.buildings.findIndex(b => {
+        const w = BUILDING_TYPES[b.id].w || 1;
+        const h = BUILDING_TYPES[b.id].h || 1;
+        return gx >= b.x && gx < b.x + w && gy >= b.y && gy < b.y + h;
+    });
+
     if (idx !== -1) {
         const b = state.buildings[idx];
         state.resources.money += BUILDING_TYPES[b.id].cost * 0.8;
@@ -837,7 +1009,7 @@ function updateTooltip() {
 
         let html = '';
         if (b) html += `<div class="font-bold text-sky-400 mb-1">${BUILDING_TYPES[b.id].name}</div>`;
-        if (ore) html += `<div class="text-slate-400">Ore: <span class="text-emerald-400">${ORE_TYPES[ore].label} ($${ORE_TYPES[ore].value})</span></div>`;
+        if (ore) html += `<div class="text-slate-400">Ore: <span class="text-emerald-400">${ORE_TYPES[ore].label} ($${ORE_TYPES[ore].value})</span><br><span class="text-xs text-sky-300">Mine Speed: ${ORE_TYPES[ore].drillSpeed}s</span></div>`;
         tooltip.innerHTML = html;
     } else {
         tooltip.style.display = 'none';
