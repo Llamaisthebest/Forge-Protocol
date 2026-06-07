@@ -785,7 +785,7 @@ function drawBuilding(b) {
         const bh = h * gs - 8;
         ctx.beginPath(); ctx.roundRect(-w*half + 4, -h*half + 4, bw, bh, 8); ctx.fill();
 
-        const glow = Math.sin(state.frame * 0.05) * 6 + 8;
+        const glow = Math.sin(state.frame * 0.02) * 6 + 8;
         ctx.shadowBlur = glow;
         ctx.shadowColor = '#d8b4fe';
         ctx.fillStyle = '#c084fc';
@@ -796,7 +796,7 @@ function drawBuilding(b) {
         ctx.lineWidth = 2;
         ctx.beginPath();
         for(let i=0; i<6; i++) {
-            ctx.lineTo(14 * Math.cos(i*Math.PI/3), 14 * Math.sin(i*Math.PI/3));
+            ctx.lineTo(20 * Math.cos(i*Math.PI/3), 20 * Math.sin(i*Math.PI/3));
         }
         ctx.closePath();
         ctx.stroke();
@@ -804,7 +804,7 @@ function drawBuilding(b) {
 
         ctx.save();
         ctx.rotate(state.frame * 0.01);
-        const coreSize = 8 + Math.sin(state.frame * 0.1) * 2;
+        const coreSize = 10 + Math.sin(state.frame * 0.04) * 2;
         ctx.beginPath();
         for(let i=0; i<6; i++) {
             ctx.lineTo(coreSize * Math.cos(i*Math.PI/3), coreSize * Math.sin(i*Math.PI/3));
@@ -815,8 +815,15 @@ function drawBuilding(b) {
         ctx.fillStyle = '#ffffff';
         ctx.shadowBlur = 15;
         ctx.shadowColor = '#ffffff';
+        const dotSize = 3;
         ctx.beginPath();
-        ctx.arc(0, 0, 2, 0, Math.PI*2);
+        for (let i = 0; i < 6; i++) {
+            ctx.lineTo(
+                dotSize * Math.cos(i * Math.PI / 3),
+                dotSize * Math.sin(i * Math.PI / 3)
+            );
+        }
+        ctx.closePath();
         ctx.fill();
         ctx.restore();
 
@@ -1001,7 +1008,7 @@ function dismantleBuilding() {
 
     if (idx !== -1) {
         const b = state.buildings[idx];
-        state.resources.money += BUILDING_TYPES[b.id].cost * 0.8;
+        state.resources.money += BUILDING_TYPES[b.id].cost * 1;
         state.buildings.splice(idx, 1);
         updateSidebar();
     }
