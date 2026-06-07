@@ -116,6 +116,11 @@
             to { transform: translateX(0); opacity: 1; }
         }
 
+        @keyframes slideOut {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(100%); opacity: 0; }
+        }
+
         #sandbox-modal {
             display: none;
             position: fixed;
@@ -216,10 +221,10 @@ const state = {
 };
 
 const ORE_TYPES = {
-    'cryston': { color: '#ef4444', label: 'Cryston', value: 2, drillSpeed: 1.0, cluster: 15, weight: 10 },
-    'bluorite': { color: '#3b82f6', label: 'Bluorite', value: 2, drillSpeed: 1.0, cluster: 15, weight: 10 },
-    'luxite': { color: '#a855f7', label: 'Luxite', value: 5, drillSpeed: 2.0, cluster:10, weight: 5 },
-    'auxirite': { color: '#fbbf24', label: 'Auxirite', value: 7, drillSpeed: 3.0, cluster:8, weight: 3 }
+    'cryston': { color: '#ef4444', label: 'Cryston', value: 2, drillSpeed: 1.0, cluster: 16, weight: 10 },
+    'bluorite': { color: '#3b82f6', label: 'Bluorite', value: 2, drillSpeed: 1.0, cluster: 16, weight: 10 },
+    'luxite': { color: '#a855f7', label: 'Luxite', value: 5, drillSpeed: 2.0, cluster:12, weight: 5 },
+    'auxirite': { color: '#fbbf24', label: 'Auxirite', value: 7, drillSpeed: 3.0, cluster:9, weight: 3 }
 };
 
 const BUILDING_TYPES = {
@@ -285,9 +290,15 @@ function generateWorld() {
 function resize() {
     canvas.width = wrapper.clientWidth;
     canvas.height = wrapper.clientHeight;
+    clampCamera();
 }
 
 function clampCamera() {
+    const maxZoomOut = canvas.width / (GRID_SIZE * 70);
+    const maxZoomIn = canvas.width / (GRID_SIZE * 10);
+
+    state.camera.zoom = Math.max(maxZoomOut, Math.min(state.camera.zoom, maxZoomIn));
+
     const gs = GRID_SIZE * state.camera.zoom;
     const worldW = WORLD_SIZE * gs;
     const worldH = WORLD_SIZE * gs;
@@ -307,7 +318,10 @@ function clampCamera() {
 
 function centerCamera() {
     const mid = (WORLD_SIZE * GRID_SIZE) / 2;
-    state.camera.zoom = 0.8;
+    const maxZoomOut = canvas.width / (GRID_SIZE * 70);
+    const maxZoomIn = canvas.width / (GRID_SIZE * 10);
+
+    state.camera.zoom = Math.max(maxZoomOut, Math.min(0.8, maxZoomIn));
     state.camera.x = canvas.width/2 - mid * state.camera.zoom;
     state.camera.y = canvas.height/2 - mid * state.camera.zoom;
     clampCamera();
@@ -320,8 +334,7 @@ function notify(msg, type = 'info') {
     el.innerHTML = msg;
     container.appendChild(el);
     setTimeout(() => {
-        el.style.opacity = '0';
-        el.style.transform = 'translateX(20px)';
+        el.style.animation = 'slideOut 0.3s ease-in forwards';
         setTimeout(() => el.remove(), 300);
     }, 4000);
 }
@@ -766,7 +779,7 @@ function drawBuilding(b) {
         drawEdgeArrow(0, 0, (b.rotation + 2) * Math.PI/2, '#f97316', 'in');
     }
     else if (b.id === 'forge') {
-        ctx.rotate(b.rotation * Math.PI / 2); // Rotate context so arrows draw properly on local edges
+        ctx.rotate(b.rotation * Math.PI / 2);
         ctx.fillStyle = def.color;
         const bw = w * gs - 8;
         const bh = h * gs - 8;
@@ -774,26 +787,24 @@ function drawBuilding(b) {
 
         const glow = Math.sin(state.frame * 0.05) * 6 + 8;
         ctx.shadowBlur = glow;
-        ctx.shadowColor = '#d8b4fe'; // Lighter, brighter purple glow
+        ctx.shadowColor = '#d8b4fe';
         ctx.fillStyle = '#c084fc';
         ctx.strokeStyle = '#c084fc';
 
-        // Outer counter-rotating containment ring
         ctx.save();
-        ctx.rotate(state.frame * -0.005);
+        ctx.rotate(state.frame * -0.015);
         ctx.lineWidth = 2;
         ctx.beginPath();
         for(let i=0; i<6; i++) {
-            ctx.lineTo(20 * Math.cos(i*Math.PI/3), 20 * Math.sin(i*Math.PI/3));
+            ctx.lineTo(14 * Math.cos(i*Math.PI/3), 14 * Math.sin(i*Math.PI/3));
         }
         ctx.closePath();
         ctx.stroke();
         ctx.restore();
 
-        // Inner pulsing & spinning active core
         ctx.save();
-        ctx.rotate(state.frame * 0.02);
-        const coreSize = 10 + Math.sin(state.frame * 0.05) * 2; // Rapid pulsing size
+        ctx.rotate(state.frame * 0.01);
+        const coreSize = 8 + Math.sin(state.frame * 0.1) * 2;
         ctx.beginPath();
         for(let i=0; i<6; i++) {
             ctx.lineTo(coreSize * Math.cos(i*Math.PI/3), coreSize * Math.sin(i*Math.PI/3));
@@ -801,21 +812,17 @@ function drawBuilding(b) {
         ctx.closePath();
         ctx.fill();
 
-        // White-hot plasma center
         ctx.fillStyle = '#ffffff';
         ctx.shadowBlur = 15;
         ctx.shadowColor = '#ffffff';
         ctx.beginPath();
-        ctx.arc(0, 0, 4, 0, Math.PI*2);
+        ctx.arc(0, 0, 2, 0, Math.PI*2);
         ctx.fill();
         ctx.restore();
 
         ctx.shadowBlur = 0;
 
-        // Draw edge arrows dynamically for the 2x2 footprint based on local center
-        // Only drawing the Right output port
         drawEdgeArrow(gs/2, gs/2, 0, '#c084fc', 'out');
-        // Left and Right input ports
         drawEdgeArrow(-gs/2, -gs/2, Math.PI, '#c084fc', 'in');
         drawEdgeArrow(-gs/2, gs/2, Math.PI, '#c084fc', 'in');
     }
@@ -907,7 +914,9 @@ function setupEvents() {
     canvas.addEventListener('wheel', e => {
         e.preventDefault();
         const delta = e.deltaY > 0 ? 0.9 : 1.1;
-        const newZoom = Math.min(Math.max(state.camera.zoom * delta, 0.1), 3);
+        const maxZoomOut = canvas.width / (GRID_SIZE * 70);
+        const maxZoomIn = canvas.width / (GRID_SIZE * 10);
+        const newZoom = Math.max(maxZoomOut, Math.min(state.camera.zoom * delta, maxZoomIn));
 
         const centerX = canvas.width / 2;
         const centerY = canvas.height / 2;
