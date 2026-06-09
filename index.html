@@ -150,7 +150,6 @@
                 <label class="text-[10px] uppercase tracking-widest text-slate-500 font-bold">Available Credits</label>
                 <div class="flex items-center justify-between">
                     <span class="text-2xl font-mono text-emerald-400" id="res-money">$0</span>
-                    <button id="btn-test-money" class="bg-emerald-600/80 hover:bg-emerald-500 text-white text-[10px] font-bold px-2 py-1 rounded transition-colors">+10k</button>
                 </div>
             </div>
         </section>
@@ -165,9 +164,9 @@
         <footer class="mt-6 pt-6 border-t border-slate-800">
             <div class="flex flex-col gap-2">
                 <button id="btn-home" class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-bold transition-all">CENTER VIEW</button>
-                <div class="text-[10px] text-slate-500 leading-relaxed font-mono">
-                    [R] Rotate | [R-CLICK] Cancel | [SHIFT+F+P] Sandbox Protocol
-                </div>
+                <button id="btn-help" class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-bold transition-all">
+                    HELP
+                </button>
             </div>
         </footer>
     </aside>
@@ -184,11 +183,94 @@
     <div class="bg-slate-900 border border-slate-700 p-8 rounded-2xl w-96 shadow-2xl">
         <h3 class="text-xl font-bold text-sky-400 mb-2">SANDBOX PROTOCOL</h3>
         <p class="text-slate-400 text-xs mb-6">Enter protocol authorization key to unlock terminal.</p>
-        <input type="password" id="sandbox-key" class="w-full bg-slate-950 border border-slate-800 p-3 rounded-lg mb-4 focus:border-sky-500 outline-none font-mono text-sky-400" placeholder="••••••••">
+        <input type="password" id="sandbox-key" class="w-full bg-slate-950 border border-slate-800 p-3 rounded-lg mb-4 focus:border-sky-500 outline-none font-mono text-sky-400" placeholder="•••••••">
         <div class="flex gap-2">
             <button id="sb-cancel" class="flex-1 py-2 bg-slate-800 rounded-lg font-bold text-sm">CANCEL</button>
             <button id="sb-confirm" class="flex-1 py-2 bg-sky-600 rounded-lg font-bold text-sm">AUTHORIZE</button>
         </div>
+    </div>
+</div>
+
+<div id="welcome-modal" style="display:flex;"
+     class="fixed inset-0 bg-black/80 z-[3000] items-center justify-center">
+
+    <div class="bg-slate-900 border border-slate-700 p-8 rounded-2xl w-[500px] max-w-[90vw]">
+        <h2 class="text-2xl font-bold text-sky-400 mb-4">
+            Welcome to Forge Protocol
+        </h2>
+
+        <div class="text-slate-300 text-sm space-y-3">
+            <p>
+                Build an automated factory to extract ore and sell products for credits.
+            </p>
+
+            <p>
+                1. Place a <strong>Drill</strong> on an ore tiles.
+            </p>
+
+            <p>
+                2. Use <strong>Conveyor Belts</strong> to move resources.
+            </p>
+
+            <p>
+                3. Send ore through <strong>Factories</strong> to increase its value.
+            </p>
+
+            <p>
+                4. Deliver products to the <strong>Trading Hub</strong> to earn credits.
+            </p>
+
+            <hr class="border-slate-700">
+
+            <p><strong>Controls</strong></p>
+            <p>Left Click = Place Building</p>
+            <p>Right Click + Drag = Move Camera</p>
+            <p>Mouse Wheel = Zoom</p>
+            <p>R = Rotate Building</p>
+        </div>
+
+        <button id="welcome-close"
+                class="mt-6 w-full py-3 bg-sky-600 hover:bg-sky-500 rounded-lg font-bold">
+            START PRODUCING
+        </button>
+    </div>
+</div>
+
+<div id="help-modal" style="display:none;"
+     class="fixed inset-0 bg-black/80 z-[3000] items-center justify-center">
+
+    <div class="bg-slate-900 border border-slate-700 p-8 rounded-2xl w-[500px] max-w-[90vw]">
+        <h2 class="text-2xl font-bold text-sky-400 mb-4">
+            HELP
+        </h2>
+
+        <div class="text-slate-300 text-sm space-y-3">
+            <p class="text-sky-400 font-bold">Controls</p>
+            <p>Left Click = Place building</p>
+            <p>Right Click + Drag = Move camera</p>
+            <p>Mouse Wheel = Zoom in/out</p>
+            <p>R = Rotate building</p>
+
+            <hr class="border-slate-700">
+
+            <p class="text-sky-400 font-bold">Buildings</p>
+
+            <p><strong>Drill:</strong> Extracts raw ore from ore tiles.</p>
+
+            <p><strong>Conveyor Belt:</strong> Moves resources forward.</p>
+
+            <p><strong>Refinery:</strong> Refines ore to increase its value.</p>
+
+            <p><strong>Forge:</strong> Combines refined items into higher-value products.</p>
+
+            <p><strong>Trading Hub:</strong> Converts items into credits.</p>
+
+        </div>
+
+        <button id="help-close"
+                class="mt-6 w-full py-3 bg-sky-600 hover:bg-sky-500 rounded-lg font-bold">
+            CLOSE
+        </button>
     </div>
 </div>
 
@@ -257,7 +339,6 @@ function init() {
     renderBuildMenu();
     setupEvents();
     centerCamera();
-    notify("Protocol Initialized. Ready for operation.", "success");
 
     window.addEventListener('beforeunload', (e) => {
         e.preventDefault();
@@ -318,12 +399,11 @@ function clampCamera() {
 
 function centerCamera() {
     const mid = (WORLD_SIZE * GRID_SIZE) / 2;
-    const maxZoomOut = canvas.width / (GRID_SIZE * 70);
-    const maxZoomIn = canvas.width / (GRID_SIZE * 10);
+    const zoom = state.camera.zoom;
 
-    state.camera.zoom = Math.max(maxZoomOut, Math.min(0.8, maxZoomIn));
-    state.camera.x = canvas.width/2 - mid * state.camera.zoom;
-    state.camera.y = canvas.height/2 - mid * state.camera.zoom;
+    state.camera.x = canvas.width / 2 - mid * zoom;
+    state.camera.y = canvas.height / 2 - mid * zoom;
+
     clampCamera();
 }
 
@@ -903,19 +983,27 @@ function setupEvents() {
     });
 
     window.addEventListener('keydown', e => {
-        activeKeys[e.key.toLowerCase()] = true;
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
-        if (e.key.toLowerCase() === 'r') state.rotation = (state.rotation + 1) % 4;
+    activeKeys[e.key.toLowerCase()] = true;
 
-        if (e.shiftKey && activeKeys['f'] && activeKeys['p']) {
-            if (state.sandboxEnabled) {
-                notify("SANDBOX PROTOCOL IS ALREADY ENABLED", "sky");
-            } else {
-                document.getElementById('sandbox-modal').style.display = 'flex';
-            }
-            activeKeys['f'] = false;
-            activeKeys['p'] = false;
+    if (e.key.toLowerCase() === 'r') {
+        state.rotation = (state.rotation + 1) % 4;
+    }
+
+    if (e.shiftKey && activeKeys['f'] && activeKeys['p']) {
+        if (state.sandboxEnabled) {
+            notify("SANDBOX PROTOCOL IS ALREADY ENABLED", "sky");
+        } else {
+            document.getElementById('sandbox-modal').style.display = 'flex';
+            setTimeout(() => {
+                document.getElementById('sandbox-key').focus();
+            }, 0);
         }
+
+        activeKeys['f'] = false;
+        activeKeys['p'] = false;
+    }
     });
 
     canvas.addEventListener('wheel', e => {
@@ -942,11 +1030,6 @@ function setupEvents() {
     document.getElementById('btn-sell').onclick = () => { state.mode = 'sell'; state.selection = null; renderBuildMenu(); };
     document.getElementById('btn-home').onclick = () => centerCamera();
 
-    document.getElementById('btn-test-money').onclick = () => {
-        state.resources.money += 10000;
-        updateSidebar();
-    };
-
     document.getElementById('sb-cancel').onclick = () => {
         document.getElementById('sandbox-modal').style.display = 'none';
         document.getElementById('sandbox-key').value = '';
@@ -954,16 +1037,38 @@ function setupEvents() {
     document.getElementById('sb-confirm').onclick = () => {
         const val = document.getElementById('sandbox-key').value;
         if (val === 'sandbox') {
-            state.resources.money += 10000000;
+            state.resources.money += 100000000;
             state.sandboxEnabled = true;
-            notify("SANDBOX PROTOCOL ENABLED - $10,000,000 ADDED", "success");
+            notify("SANDBOX PROTOCOL ENABLED: +$100,000,000", "success");
             updateSidebar();
         } else {
-            notify("ACCESS DENIED: INVALID KEY", "danger");
+            notify("ACCESS DENIED: Invalid Key", "danger");
         }
         document.getElementById('sandbox-modal').style.display = 'none';
         document.getElementById('sandbox-key').value = '';
     };
+    document.getElementById('sandbox-key').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+        document.getElementById('sb-confirm').click();
+    }
+    });
+
+    document.getElementById('welcome-close').onclick = () => {
+    document.getElementById('welcome-modal').style.display = 'none';
+
+    setTimeout(() => {
+        notify("PROTOCOL INITIALIZED. Ready for operation.", "success");
+    }, 250);
+    };
+
+    document.getElementById('btn-help').onclick = () => {
+        document.getElementById('help-modal').style.display = 'flex';
+    };
+
+    document.getElementById('help-close').onclick = () => {
+        document.getElementById('help-modal').style.display = 'none';
+    };
+
 }
 
 function placeBuilding() {
